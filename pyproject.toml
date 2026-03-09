@@ -5,9 +5,27 @@ description = "End-to-End Predictive Maintenance with Automated Retraining, Drif
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "jupyter>=1.1.1",
-    "matplotlib>=3.10.8",
     "numpy>=2.4.3",
     "pandas>=3.0.1",
+    "scikit-learn>=1.8.0",
+]
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.8",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.5",
     "seaborn>=0.13.2",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
