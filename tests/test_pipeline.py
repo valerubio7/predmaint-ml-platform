@@ -1,7 +1,7 @@
 import pytest
 
-from src.data.ingest import load_raw_data
-from src.features.build_features import build_features
+from data.ingest import load_raw_data
+from features.build_features import build_features
 
 
 @pytest.fixture
