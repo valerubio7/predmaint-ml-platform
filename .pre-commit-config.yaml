@@ -39,7 +39,7 @@ repos:
       - id: mypy
         args: [--ignore-missing-imports, --no-strict-optional]
         files: ^src/
-        additional_dependencies: [types-pyyaml]
+        additional_dependencies: [types-pyyaml, types-requests]
 
   # --- Commit Message ---
   - repo: https://github.com/compilerla/conventional-pre-commit
