@@ -3,5 +3,8 @@ models/
 __pycache__/
 *.pkl
 *.pyc
+*.parquet
+data/processed/
 .ipynb_checkpoints/
 .venv/
+*.egg-info/

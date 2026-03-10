@@ -14,9 +14,13 @@ lint:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	rm -rf .mypy_cache .pytest_cache .ruff_cache
+	rm -rf .ipynb_checkpoints notebooks/.ipynb_checkpoints
+	rm -rf models/
 
 process-data:
-	uv run python src/data/explore.py
+	uv run python src/data/pipeline.py
 
 train:
 	uv run python src/models/train.py

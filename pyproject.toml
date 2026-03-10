@@ -5,9 +5,14 @@ description = "End-to-End Predictive Maintenance with Automated Retraining, Drif
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi>=0.115.0",
     "numpy>=2.4.3",
     "pandas>=3.0.1",
+    "pyarrow>=20.0.0",
+    "pyyaml>=6.0.2",
     "scikit-learn>=1.8.0",
+    "uvicorn>=0.34.0",
+    "xgboost>=3.0.0",
 ]
 
 [dependency-groups]
@@ -18,7 +23,15 @@ dev = [
     "pytest>=9.0.2",
     "ruff>=0.15.5",
     "seaborn>=0.13.2",
+    "types-pyyaml>=6.0.12.20250915",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 88

@@ -1,0 +1,31 @@
+data:
+  raw_path: "data/raw/ai4i2020.csv"
+  processed_path: "data/processed/features.parquet"
+  test_size: 0.2
+  random_state: 42
+
+features:
+  numeric:
+    - "Air temperature [K]"
+    - "Process temperature [K]"
+    - "Rotational speed [rpm]"
+    - "Torque [Nm]"
+    - "Tool wear [min]"
+  categorical:
+    - "Type"
+  drop:
+    - "UDI"
+    - "Product ID"
+    - "TWF"
+    - "HDF"
+    - "PWF"
+    - "OSF"
+    - "RNF"
+
+model:
+  name: "xgboost"
+  params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    scale_pos_weight: 29
