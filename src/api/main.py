@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -13,7 +14,23 @@ app = FastAPI(
     version="0.1.0",
 )
 
-model = joblib.load(MODEL_PATH)
+_model: Any = None
+
+
+def get_model() -> Any:
+    """Load the model lazily; raises 503 if the file is not yet present."""
+    global _model
+    if _model is None:
+        if not MODEL_PATH.exists():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Model not found at {MODEL_PATH}. "
+                    "Train the model and copy model.pkl into the models/ directory."
+                ),
+            )
+        _model = joblib.load(MODEL_PATH)
+    return _model
 
 
 class SensorData(BaseModel):
@@ -39,6 +56,7 @@ def health():
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(data: SensorData):
+    model = get_model()
     try:
         features = pd.DataFrame(
             [
@@ -62,5 +80,7 @@ def predict(data: SensorData):
             failure_predicted=bool(prediction),
             failure_probability=round(float(probability), 4),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
