@@ -25,5 +25,8 @@ process-data:
 train:
 	uv run python src/models/train.py
 
+mlflow-ui:
+	uv run mlflow ui
+
 run:
 	uv run uvicorn src.api.main:app --reload

@@ -8,3 +8,5 @@ data/processed/
 .ipynb_checkpoints/
 .venv/
 *.egg-info/
+mlruns/
+mlflow.db
