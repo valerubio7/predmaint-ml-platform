@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 
 FEATURE_COLUMNS = [
@@ -13,13 +15,22 @@ CATEGORICAL_COLUMN = "Type"
 DROP_COLUMNS = ["UDI", "Product ID", "TWF", "HDF", "PWF", "OSF", "RNF"]
 
 
+def _sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace characters not allowed in XGBoost feature names ([ ] <)."""
+    df.columns = [re.sub(r"[\[\]<]", "", col).strip() for col in df.columns]
+    df.columns = [re.sub(r"\s+", "_", col) for col in df.columns]
+    return df
+
+
 def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Transform raw data into model-ready features and target."""
     df = df.drop(columns=DROP_COLUMNS)
     df = pd.get_dummies(df, columns=[CATEGORICAL_COLUMN], drop_first=False)
+    df = _sanitize_columns(df)
 
-    X = df.drop(columns=[TARGET_COLUMN])
-    y = df[TARGET_COLUMN]
+    target_col = re.sub(r"\s+", "_", TARGET_COLUMN)
+    X = df.drop(columns=[target_col])
+    y = df[target_col]
 
     return X, y
 
