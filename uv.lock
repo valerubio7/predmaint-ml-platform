@@ -1720,6 +1720,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "joblib" },
     { name = "mlflow" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1745,6 +1746,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "joblib", specifier = ">=1.5.3" },
     { name = "mlflow", specifier = ">=3.10.1" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "pandas", specifier = ">=2.2.0,<3" },
