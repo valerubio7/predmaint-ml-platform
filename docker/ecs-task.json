@@ -1,0 +1,29 @@
+{
+	"family": "predmaint-api",
+	"networkMode": "awsvpc",
+	"requiresCompatibilities": ["FARGATE"],
+	"cpu": "256",
+	"memory": "512",
+	"executionRoleArn": "arn:aws:iam::321305251356:role/ecsTaskExecutionRole",
+	"containerDefinitions": [
+		{
+			"name": "predmaint-api",
+			"image": "321305251356.dkr.ecr.us-east-2.amazonaws.com/predmaint-api:latest",
+			"portMappings": [
+				{
+					"containerPort": 8000,
+					"protocol": "tcp"
+				}
+			],
+			"essential": true,
+			"logConfiguration": {
+				"logDriver": "awslogs",
+				"options": {
+					"awslogs-group": "/ecs/predmaint-api",
+					"awslogs-region": "us-east-2",
+					"awslogs-stream-prefix": "ecs"
+				}
+			}
+		}
+	]
+}
