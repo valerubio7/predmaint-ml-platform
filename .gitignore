@@ -10,3 +10,4 @@ data/processed/
 *.egg-info/
 mlruns/
 mlflow.db
+reports/
