@@ -1,6 +1,7 @@
 models/*
 !models/.gitkeep
 .env
+*accessKeys*.csv
 __pycache__/
 *.pkl
 *.pyc
