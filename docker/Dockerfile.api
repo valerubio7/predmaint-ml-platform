@@ -5,10 +5,15 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml uv.lock ./
+# Install third-party dependencies first (cached layer, invalidated only on
+# pyproject.toml / uv.lock changes, not on source code changes).
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --no-dev --frozen --no-install-project
+
+# Copy source and install the project itself.
+COPY src/ ./src/
 RUN uv sync --no-dev --frozen
 
-COPY src/ ./src/
 COPY configs/ ./configs/
 
 # models/ is excluded from version control; copy it into the build context
