@@ -12,6 +12,7 @@ from xgboost import XGBClassifier
 
 from data.ingest import load_raw_data
 from features.build_features import build_features
+from monitoring.drift_detector import detect_drift
 
 CONFIG_PATH = Path("configs/training.yaml")
 
@@ -90,5 +91,29 @@ def training_pipeline() -> None:
         print(f"  {k}: {v:.4f}")
 
 
+@task(name="check-drift")
+def check_drift(config: dict) -> bool:
+    """Check if production data has drifted from reference."""
+    df = load_raw_data(Path(config["data"]["raw_path"]))
+    X, y = build_features(df)
+    production_sample = X.iloc[7000:]
+    result = detect_drift(production_sample)
+    print(f"Drift detected: {result['drift_detected']}")
+    return result["drift_detected"]
+
+
+@flow(name="monitoring-pipeline")
+def monitoring_pipeline() -> None:
+    """Run drift detection and trigger retraining if needed."""
+    config = load_config()
+    drift = check_drift(config)
+
+    if drift:
+        print("Drift detected — triggering retraining...")
+        training_pipeline()
+    else:
+        print("No drift detected — model is stable.")
+
+
 if __name__ == "__main__":
-    training_pipeline()
+    monitoring_pipeline()
