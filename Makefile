@@ -23,7 +23,7 @@ process-data:
 	uv run python src/data/pipeline.py
 
 train:
-	uv run python src/models/train.py
+	uv run python src/pipelines/training_flow.py
 
 mlflow-ui:
 	uv run mlflow ui
