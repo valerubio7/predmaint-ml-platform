@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --no-dev --frozen
+
+COPY src/ ./src/
+COPY configs/ ./configs/
+
+# models/ is excluded from version control; copy it into the build context
+# before running `docker build`, or mount it at runtime with -v ./models:/app/models.
+# The directory is pre-created so the container starts even without a model file
+# (the API returns 503 on /predict until a model is present).
+RUN mkdir -p models
+COPY --link models/ ./models/
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
