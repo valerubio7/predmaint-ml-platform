@@ -1,4 +1,4 @@
-.PHONY: setup test lint clean run process-data train
+.PHONY: setup test lint clean run process-data train deploy deploy-skip-train
 
 setup:
 	uv sync --group dev
@@ -30,3 +30,12 @@ mlflow-ui:
 
 run:
 	uv run uvicorn src.api.main:app --reload
+
+## Deploy targets (require active AWS credentials)
+# Full pipeline: train → build → push to ECR → force ECS redeploy → verify /predict
+deploy:
+	bash scripts/deploy.sh
+
+# Re-deploy using an existing model.pkl without retraining
+deploy-skip-train:
+	bash scripts/deploy.sh --skip-train
