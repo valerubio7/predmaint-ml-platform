@@ -3,8 +3,9 @@ name = "predmaint-ml-platform"
 version = "0.1.0"
 description = "End-to-End Predictive Maintenance with Automated Retraining, Drift Detection & Production Monitoring"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
+    "evidently>=0.7.20",
     "fastapi>=0.115.0",
     "joblib>=1.5.3",
     "mlflow>=3.10.1",
@@ -39,7 +40,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py314"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
