@@ -88,13 +88,3 @@ reset: clean ## Reset project to initial state (destructive)
 	rm -rf reports/
 	rm -rf .venv/
 	@echo "Project reset — run 'make setup' to reinitialize"
-
-
-# Deploy (requires active AWS credentials)
-.PHONY: deploy deploy-skip-train
-
-deploy: ## Train -> build -> push to ECR -> redeploy ECS -> verify /predict
-	bash scripts/deploy.sh
-
-deploy-skip-train: ## Redeploy with existing model, without retraining
-	bash scripts/deploy.sh --skip-train

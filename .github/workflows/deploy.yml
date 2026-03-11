@@ -1,0 +1,102 @@
+# Deploy to AWS ECS Fargate
+#
+# Triggered on every push to main after CI passes.
+# Uses OIDC (no static AWS credentials) — requires one-time setup:
+#
+#   1. Create an IAM OIDC Identity Provider in AWS:
+#        Provider URL : https://token.actions.githubusercontent.com
+#        Audience     : sts.amazonaws.com
+#
+#   2. Create an IAM Role (e.g. "github-actions-deploy") with the trust policy:
+#        {
+#          "Version": "2012-10-17",
+#          "Statement": [{
+#            "Effect": "Allow",
+#            "Principal": { "Federated": "arn:aws:iam::321305251356:oidc-provider/token.actions.githubusercontent.com" },
+#            "Action": "sts:AssumeRoleWithWebIdentity",
+#            "Condition": {
+#              "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+#              "StringLike":   { "token.actions.githubusercontent.com:sub": "repo:<org>/<repo>:ref:refs/heads/main" }
+#            }
+#          }]
+#        }
+#      Attach the following managed / inline permissions:
+#        - AmazonEC2ContainerRegistryPowerUser
+#        - ecs:UpdateService, ecs:DescribeServices (on predmaint-cluster/predmaint-api)
+#        - iam:PassRole (on ecsTaskExecutionRole and ecsTaskRole)
+#
+#   3. Add a single GitHub Secret to the repository:
+#        AWS_DEPLOY_ROLE_ARN = arn:aws:iam::321305251356:role/github-actions-deploy
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write  # required for OIDC token exchange
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false  # never cancel an in-flight deploy
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REGISTRY: 321305251356.dkr.ecr.us-east-2.amazonaws.com
+  ECR_REPOSITORY: predmaint-api
+  ECS_CLUSTER: predmaint-cluster
+  ECS_SERVICE: predmaint-api
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag & push Docker image
+        id: build
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --file Dockerfile.api \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Force new ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --force-new-deployment \
+            --query "service.deployments[0].status" \
+            --output text
+
+      - name: Wait for service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
+
+      - name: Print deployed image
+        run: echo "Deployed image ${{ steps.build.outputs.image }}"
