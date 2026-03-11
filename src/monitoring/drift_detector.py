@@ -4,8 +4,8 @@ import pandas as pd
 from evidently import DataDefinition, Dataset, Report
 from evidently.presets import DataDriftPreset
 
-from data.ingest import load_raw_data
 from features.build_features import build_features
+from ingestion.ingest import load_raw_data
 
 REFERENCE_PATH = Path("data/processed/reference.parquet")
 REPORTS_PATH = Path("reports/drift")

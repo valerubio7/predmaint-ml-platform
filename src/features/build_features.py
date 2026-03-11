@@ -36,7 +36,7 @@ def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 
 if __name__ == "__main__":
-    from data.ingest import load_raw_data
+    from ingestion.ingest import load_raw_data
 
     df = load_raw_data()
     X, y = build_features(df)

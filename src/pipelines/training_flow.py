@@ -11,8 +11,8 @@ from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_sco
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
-from data.ingest import load_raw_data
 from features.build_features import build_features
+from ingestion.ingest import load_raw_data
 from monitoring.drift_detector import detect_drift
 
 CONFIG_PATH = Path("configs/training.yaml")

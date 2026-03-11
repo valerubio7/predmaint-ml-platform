@@ -49,7 +49,7 @@ test: ## Run all tests
 .PHONY: process-data train
 
 process-data: ## Run ingestion and feature engineering pipeline
-	$(PYTHON) $(SRC)/data/pipeline.py
+	$(PYTHON) $(SRC)/pipelines/pipeline.py
 
 train: process-data ## Process data and train the model
 	$(PYTHON) $(SRC)/pipelines/training_flow.py
