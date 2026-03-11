@@ -1,25 +1,26 @@
+import os
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import plotly.express as px
-import requests
 import streamlit as st
 
-API_URL = "http://3.149.25.90:8000"
+API_URL = os.getenv("STREAMLIT_API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="PredMaint Dashboard", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ PredMaint ML Platform")
 st.caption("Predictive Maintenance — Real-time monitoring dashboard")
 
-# --- Sidebar ---
+# Sidebar
 st.sidebar.header("Configuration")
 api_url = st.sidebar.text_input("API URL", value=API_URL)
 
-# --- Health Check ---
+# Health Check
 st.header("System Status")
 try:
-    response = requests.get(f"{api_url}/health", timeout=3)
+    response = httpx.get(f"{api_url}/health", timeout=3)
     if response.status_code == 200:
         st.success("API is online")
     else:
@@ -27,7 +28,7 @@ try:
 except Exception:
     st.error("API is offline — check the URL")
 
-# --- Prediction ---
+# Prediction
 st.header("Real-time Prediction")
 st.write("Enter sensor readings to get a failure prediction.")
 
@@ -60,7 +61,7 @@ if st.button("Predict", type="primary"):
         "type_m": type_m,
     }
     try:
-        response = requests.post(f"{api_url}/predict", json=payload, timeout=5)
+        response = httpx.post(f"{api_url}/predict", json=payload, timeout=5)
         result = response.json()
 
         prob = result["failure_probability"]
@@ -76,7 +77,7 @@ if st.button("Predict", type="primary"):
     except Exception as e:
         st.error(f"Prediction failed: {e}")
 
-# --- Dataset Overview ---
+# Dataset Overview
 st.header("Dataset Overview")
 data_path = Path("data/raw/ai4i2020.csv")
 
