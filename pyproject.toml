@@ -9,7 +9,6 @@ dependencies = [
     "fastapi>=0.115.0",
     "joblib>=1.5.3",
     "mlflow>=3.10.1",
-    "numpy>=2.4.3",
     "pandas>=2.2.0,<3",
     "plotly>=5.24.1",
     "prefect>=3.6.21",
@@ -23,14 +22,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "jupyter>=1.1.1",
-    "matplotlib>=3.10.8",
     "mypy>=1.19.1",
-    "pip>=26.0",
+    "pandas-stubs>=3.0.0.260204",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
     "ruff>=0.15.5",
-    "seaborn>=0.13.2",
+    "scikit-learn-stubs>=0.0.3",
     "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20260107",
 ]
@@ -51,3 +49,22 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+    "joblib",
+    "evidently",
+    "evidently.*",
+    "plotly",
+    "plotly.*",
+    "mlflow.xgboost",
+    "prefect",
+    "prefect.*",
+]
+ignore_missing_imports = true
