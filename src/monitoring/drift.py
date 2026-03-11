@@ -1,14 +1,16 @@
+import os
 from pathlib import Path
 
 import pandas as pd
 from evidently import DataDefinition, Dataset, Report
 from evidently.presets import DataDriftPreset
 
-from features.build_features import build_features
-from ingestion.ingest import load_raw_data
+from data.loader import load_raw_data
+from data.transformer import build_features
 
 REFERENCE_PATH = Path("data/processed/reference.parquet")
 REPORTS_PATH = Path("reports/drift")
+DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "0.05"))
 
 
 def build_reference_dataset() -> None:
@@ -52,8 +54,7 @@ def detect_drift(production_data: pd.DataFrame) -> dict:
     result = snapshot.dict()
     # evidently 0.7+: first metric is DriftedColumnsCount with value.share
     drift_share = result["metrics"][0]["value"]["share"]
-    threshold = 0.5  # matches DataDriftPreset default
-    drift_detected = drift_share >= threshold
+    drift_detected = drift_share >= DRIFT_THRESHOLD
 
     return {
         "drift_detected": drift_detected,

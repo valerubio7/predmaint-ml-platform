@@ -1,5 +1,5 @@
+import os
 from pathlib import Path
-from typing import cast
 
 import joblib
 import mlflow
@@ -11,11 +11,17 @@ from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_sco
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
-from features.build_features import build_features
-from ingestion.ingest import load_raw_data
-from monitoring.drift_detector import detect_drift
+from data.loader import load_raw_data
+from data.transformer import build_features
+from monitoring.drift import detect_drift
 
 CONFIG_PATH = Path("configs/training.yaml")
+
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "predmaint")
+MLFLOW_MODEL_NAME = os.getenv("MLFLOW_MODEL_NAME", "predmaint-classifier")
+MODEL_PATH = Path(os.getenv("MODEL_PATH", "models/model.pkl"))
+RETRAINING_TRIGGER = os.getenv("RETRAINING_TRIGGER", "true").lower() == "true"
 
 
 @task(name="load-config")
@@ -37,14 +43,15 @@ def build_features_task(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 @task(name="split-data")
 def split_data(
     X: pd.DataFrame, y: pd.Series, config: dict
-) -> list[pd.DataFrame | pd.Series]:
-    return train_test_split(
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
         test_size=config["data"]["test_size"],
         random_state=config["data"]["random_state"],
         stratify=y,
     )
+    return X_train, X_test, y_train, y_test
 
 
 @task(name="train-model")
@@ -72,15 +79,17 @@ def evaluate_model(
 
 @task(name="save-model")
 def save_model(model, metrics: dict) -> None:
-    mlflow.set_experiment("predmaint-prefect")
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
     with mlflow.start_run():
         mlflow.log_metrics(metrics)
-        mlflow.xgboost.log_model(model, artifact_path="model")
+        mlflow.xgboost.log_model(
+            model, artifact_path="model", registered_model_name=MLFLOW_MODEL_NAME
+        )
 
-    model_path = Path("models/model.pkl")
-    model_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, model_path)
-    print(f"Model saved: {model_path}")
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, MODEL_PATH)
+    print(f"Model saved: {MODEL_PATH}")
 
 
 @flow(name="training-pipeline")
@@ -89,10 +98,6 @@ def training_pipeline() -> None:
     df = ingest_data(config)
     X, y = build_features_task(df)
     X_train, X_test, y_train, y_test = split_data(X, y, config)
-    X_train = cast(pd.DataFrame, X_train)
-    X_test = cast(pd.DataFrame, X_test)
-    y_train = cast(pd.Series, y_train)
-    y_test = cast(pd.Series, y_test)
     model: XGBClassifier = train_model(X_train, y_train, config)  # type: ignore[assignment]
     metrics: dict = evaluate_model(model, X_test, y_test)
     save_model(model, metrics)
@@ -119,9 +124,11 @@ def monitoring_pipeline() -> None:
     config = load_config()
     drift = check_drift(config)
 
-    if drift:
+    if drift and RETRAINING_TRIGGER:
         print("Drift detected — triggering retraining...")
         training_pipeline()
+    elif drift:
+        print("Drift detected — retraining disabled by RETRAINING_TRIGGER.")
     else:
         print("No drift detected — model is stable.")
 

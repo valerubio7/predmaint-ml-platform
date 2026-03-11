@@ -3,8 +3,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from features.build_features import build_features
-from ingestion.ingest import load_raw_data
+from data.loader import load_raw_data
+from data.transformer import build_features
 
 CONFIG_PATH = Path("configs/training.yaml")
 
