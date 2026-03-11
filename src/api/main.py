@@ -1,12 +1,14 @@
+import os
 from pathlib import Path
-from typing import Any
 
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from sklearn.pipeline import Pipeline
 
-MODEL_PATH = Path("models/model.pkl")
+MODEL_PATH = Path(os.getenv("MODEL_PATH", "models/model.pkl"))
+API_ENV = os.getenv("API_ENV", "development")
 
 app = FastAPI(
     title="PredMaint API",
@@ -14,10 +16,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-_model: Any = None
+_model: Pipeline | None = None
 
 
-def get_model() -> Any:
+def get_model() -> Pipeline:
     """Load the model lazily; raises 503 if the file is not yet present."""
     global _model
     if _model is None:
@@ -30,6 +32,8 @@ def get_model() -> Any:
                 ),
             )
         _model = joblib.load(MODEL_PATH)
+    if _model is None:
+        raise RuntimeError(f"Model loaded from {MODEL_PATH} is None")
     return _model
 
 
