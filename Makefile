@@ -1,41 +1,100 @@
-.PHONY: setup test lint clean run process-data train deploy deploy-skip-train
+# Config
+UV        := uv run
+PYTHON    := $(UV) python
+SRC       := src
+TESTS     := tests
+PORT      := 8000
 
-setup:
+# Default target
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
+
+# Setup
+.PHONY: setup
+setup: ## Install dev dependencies and set up pre-commit
 	uv sync --group dev
 	uv run pre-commit install
+	@echo "Environment ready"
 
-test:
-	uv run pytest
 
-lint:
-	uv run ruff check src/
-	uv run ruff format src/
+# Code Quality
+.PHONY: lint format typecheck check
 
-clean:
+lint: ## Check style without modifying files (CI-friendly)
+	$(UV) ruff check $(SRC)
+
+format: ## Format code in-place
+	$(UV) ruff format $(SRC)
+	$(UV) ruff check --fix $(SRC)
+
+typecheck: ## Run mypy on src/
+	$(UV) mypy $(SRC)
+
+check: lint typecheck ## Run lint + typecheck (ideal before committing)
+
+
+# Tests
+.PHONY: test test-fast test-cov
+
+test: ## Run all tests
+	$(UV) pytest $(TESTS)
+
+
+# Data And Training Pipeline
+.PHONY: process-data train
+
+process-data: ## Run ingestion and feature engineering pipeline
+	$(PYTHON) $(SRC)/data/pipeline.py
+
+train: process-data ## Process data and train the model
+	$(PYTHON) $(SRC)/pipelines/training_flow.py
+
+
+# Local Services
+.PHONY: run mlflow-ui dashboard
+
+run: ## Start the API in development mode (hot reload)
+	$(UV) uvicorn $(SRC).api.main:app --reload --port $(PORT)
+
+mlflow-ui: ## Open MLflow UI at http://localhost:5000
+	$(UV) mlflow ui
+
+dashboard: ## Start the Streamlit dashboard
+	$(UV) streamlit run $(SRC)/dashboard/app.py
+
+
+# Cleanup
+.PHONY: clean reset
+
+clean: ## Remove Python, linter, and notebook caches
 	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
+	find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
 	rm -rf .ipynb_checkpoints notebooks/.ipynb_checkpoints
-	rm -rf models/
+	rm -rf reports/coverage
+	@echo "Cache cleaned"
 
-process-data:
-	uv run python src/data/pipeline.py
+reset: ## Reset project to initial state (destructive)
+	@echo "WARNING: This will delete models, processed data, MLflow runs and the DB. Continue? [y/N] " \
+		&& read ans && [ $${ans:-N} = y ]
+	rm -rf models/*.pkl
+	rm -rf data/processed/
+	rm -rf mlruns/ mlflow.db
+	rm -rf reports/
+	rm -rf .venv/
+	@echo "Project reset — run 'make setup' to reinitialize"
 
-train:
-	uv run python src/pipelines/training_flow.py
 
-mlflow-ui:
-	uv run mlflow ui
+# Deploy (requires active AWS credentials)
+.PHONY: deploy deploy-skip-train
 
-run:
-	uv run uvicorn src.api.main:app --reload
-
-## Deploy targets (require active AWS credentials)
-# Full pipeline: train → build → push to ECR → force ECS redeploy → verify /predict
-deploy:
+deploy: ## Train -> build -> push to ECR -> redeploy ECS -> verify /predict
 	bash scripts/deploy.sh
 
-# Re-deploy using an existing model.pkl without retraining
-deploy-skip-train:
+deploy-skip-train: ## Redeploy with existing model, without retraining
 	bash scripts/deploy.sh --skip-train

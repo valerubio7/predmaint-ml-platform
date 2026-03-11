@@ -1,21 +1,53 @@
-# Exclude version control and tooling
+# Version control
 .git/
-.github/
+.gitignore
+
+# Python environment
 .venv/
-.ruff_cache/
-.mypy_cache/
 __pycache__/
-*.pyc
+*.py[cod]
 *.egg-info/
 
-# Exclude runtime artifacts
-mlruns/
-mlflow.db
+# Dev tooling
+.pre-commit-config.yaml
+.secrets.baseline
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Tests
+tests/
 reports/
 
-# Exclude data (large files, not needed at runtime)
-data/
+# Notebooks & exploration
+notebooks/
+.ipynb_checkpoints/
 
-# models/ is intentionally NOT excluded so `COPY models/ ./models/` works.
-# Place model.pkl in models/ before running `docker build`, or mount it
-# at runtime: docker run -v ./models:/app/models predmaint-api
+# Data
+data/raw/
+data/processed/
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Models (mounted at runtime or copied explicitly)
+models/*.pkl
+
+# CI/CD & docs
+.github/
+docs/
+*.md
+!README.md
+
+# AWS & secrets
+.env
+.env.*
+!.env.example
+*accessKeys*.csv
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
