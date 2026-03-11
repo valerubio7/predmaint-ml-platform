@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -5,6 +6,8 @@ import yaml
 
 from data.loader import load_raw_data
 from data.transformer import build_features
+
+logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path("configs/training.yaml")
 
@@ -29,9 +32,9 @@ def run_pipeline(config: dict) -> tuple[pd.DataFrame, pd.Series]:
     output["target"] = y
     output.to_parquet(processed_path, index=False)
 
-    print("Pipeline complete.")
-    print(f"Features: {X.shape[1]} columns, {X.shape[0]} rows")
-    print(f"Saved to: {processed_path}")
+    logger.info("Pipeline complete.")
+    logger.info("Features: %d columns, %d rows", X.shape[1], X.shape[0])
+    logger.info("Saved to: %s", processed_path)
 
     return X, y
 

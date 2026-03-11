@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -8,25 +9,30 @@ from evidently.presets import DataDriftPreset
 from data.loader import load_raw_data
 from data.transformer import build_features
 
+logger = logging.getLogger(__name__)
+
 REFERENCE_PATH = Path("data/processed/reference.parquet")
 REPORTS_PATH = Path("reports/drift")
 DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "0.05"))
 
+# Fraction of the dataset used as the reference (historical) split.
+REFERENCE_SPLIT_RATIO = float(os.getenv("REFERENCE_SPLIT_RATIO", "0.7"))
+
 
 def build_reference_dataset() -> None:
-    """Save first 70% of data as reference (simulates historical training data)."""
+    """Save the first REFERENCE_SPLIT_RATIO of data as the reference dataset."""
     df = load_raw_data()
     X, y = build_features(df)
 
     reference = X.copy()
     reference["target"] = y
 
-    split = int(len(reference) * 0.7)
+    split = int(len(reference) * REFERENCE_SPLIT_RATIO)
     reference_data = reference.iloc[:split]
 
     REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
     reference_data.to_parquet(REFERENCE_PATH, index=False)
-    print(f"Reference dataset saved: {reference_data.shape}")
+    logger.info("Reference dataset saved: %s", reference_data.shape)
 
 
 def detect_drift(production_data: pd.DataFrame) -> dict:
@@ -49,7 +55,7 @@ def detect_drift(production_data: pd.DataFrame) -> dict:
     REPORTS_PATH.mkdir(parents=True, exist_ok=True)
     report_path = REPORTS_PATH / "drift_report.html"
     snapshot.save_html(str(report_path))
-    print(f"Drift report saved: {report_path}")
+    logger.info("Drift report saved: %s", report_path)
 
     result = snapshot.dict()
     # evidently 0.7+: first metric is DriftedColumnsCount with value.share
@@ -63,12 +69,13 @@ def detect_drift(production_data: pd.DataFrame) -> dict:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     build_reference_dataset()
 
     df = load_raw_data()
     X, y = build_features(df)
-    production_sample = X.iloc[7000:]
+    production_sample = X.iloc[int(len(X) * REFERENCE_SPLIT_RATIO) :]
 
     result = detect_drift(production_sample)
-    print(f"Drift detected: {result['drift_detected']}")
-    print(f"Report: {result['report_path']}")
+    logger.info("Drift detected: %s", result["drift_detected"])
+    logger.info("Report: %s", result["report_path"])

@@ -4,24 +4,6 @@ data:
   test_size: 0.2
   random_state: 42
 
-features:
-  numeric:
-    - "Air temperature [K]"
-    - "Process temperature [K]"
-    - "Rotational speed [rpm]"
-    - "Torque [Nm]"
-    - "Tool wear [min]"
-  categorical:
-    - "Type"
-  drop:
-    - "UDI"
-    - "Product ID"
-    - "TWF"
-    - "HDF"
-    - "PWF"
-    - "OSF"
-    - "RNF"
-
 model:
   name: "xgboost"
   params:
