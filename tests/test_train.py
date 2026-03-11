@@ -80,23 +80,22 @@ def _make_config(tmp_path: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# load_config task
+# load_config_task task
 # ---------------------------------------------------------------------------
 
 
 def test_load_config_task_returns_dict(tmp_path, monkeypatch):
-    """load_config task must return a dict."""
-    from training.train import load_config
+    """load_config_task must return a dict."""
+    import data.pipeline as pipeline_module
+    from training.train import load_config_task
 
     config_content = {"data": {"raw_path": "x.csv"}}
     cfg_path = tmp_path / "training.yaml"
     cfg_path.write_text(yaml.dump(config_content))
 
-    import training.train as train_module
+    monkeypatch.setattr(pipeline_module, "CONFIG_PATH", cfg_path)
 
-    monkeypatch.setattr(train_module, "CONFIG_PATH", cfg_path)
-
-    result = load_config.fn()
+    result = load_config_task.fn()
     assert isinstance(result, dict)
 
 
@@ -299,42 +298,13 @@ def test_evaluate_model_task_values_in_range(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# save_model task
+# log_to_mlflow task
 # ---------------------------------------------------------------------------
 
 
-def test_save_model_task_saves_pkl(tmp_path, monkeypatch):
-    """save_model task must write a .pkl file to MODEL_PATH."""
-    import training.train as train_module
-
-    monkeypatch.setattr(train_module, "MODEL_PATH", tmp_path / "model.pkl")
-
-    mock_model = MagicMock()
-    metrics = {"f1": 0.8, "precision": 0.75, "recall": 0.85, "roc_auc": 0.9}
-
-    with (
-        patch("training.train.mlflow.set_tracking_uri"),
-        patch("training.train.mlflow.set_experiment"),
-        patch("training.train.mlflow.start_run") as mock_run,
-        patch("training.train.mlflow.log_metrics"),
-        patch("training.train.mlflow.xgboost.log_model"),
-        patch("training.train.joblib.dump") as mock_dump,
-    ):
-        mock_run.return_value.__enter__ = MagicMock(return_value=None)
-        mock_run.return_value.__exit__ = MagicMock(return_value=False)
-
-        train_module.save_model.fn(mock_model, metrics)
-
-    mock_dump.assert_called_once()
-    # First argument to joblib.dump must be the model
-    assert mock_dump.call_args[0][0] is mock_model
-
-
-def test_save_model_task_logs_all_metrics(tmp_path, monkeypatch):
-    """save_model task must call mlflow.log_metrics with all 4 metrics."""
-    import training.train as train_module
-
-    monkeypatch.setattr(train_module, "MODEL_PATH", tmp_path / "model.pkl")
+def test_log_to_mlflow_task_calls_log_metrics(tmp_path):
+    """log_to_mlflow task must call mlflow.log_metrics with all 4 metrics."""
+    from training.train import log_to_mlflow
 
     metrics = {"f1": 0.8, "precision": 0.75, "recall": 0.85, "roc_auc": 0.9}
 
@@ -344,11 +314,69 @@ def test_save_model_task_logs_all_metrics(tmp_path, monkeypatch):
         patch("training.train.mlflow.start_run") as mock_run,
         patch("training.train.mlflow.log_metrics") as mock_log,
         patch("training.train.mlflow.xgboost.log_model"),
-        patch("training.train.joblib.dump"),
     ):
         mock_run.return_value.__enter__ = MagicMock(return_value=None)
         mock_run.return_value.__exit__ = MagicMock(return_value=False)
 
-        train_module.save_model.fn(MagicMock(), metrics)
+        log_to_mlflow.fn(MagicMock(), metrics)
 
     mock_log.assert_called_once_with(metrics)
+
+
+def test_log_to_mlflow_task_registers_model(tmp_path):
+    """log_to_mlflow task must call mlflow.xgboost.log_model."""
+    from training.train import log_to_mlflow
+
+    metrics = {"f1": 0.8, "precision": 0.75, "recall": 0.85, "roc_auc": 0.9}
+    mock_model = MagicMock()
+
+    with (
+        patch("training.train.mlflow.set_tracking_uri"),
+        patch("training.train.mlflow.set_experiment"),
+        patch("training.train.mlflow.start_run") as mock_run,
+        patch("training.train.mlflow.log_metrics"),
+        patch("training.train.mlflow.xgboost.log_model") as mock_xgb_log,
+    ):
+        mock_run.return_value.__enter__ = MagicMock(return_value=None)
+        mock_run.return_value.__exit__ = MagicMock(return_value=False)
+
+        log_to_mlflow.fn(mock_model, metrics)
+
+    mock_xgb_log.assert_called_once()
+    assert mock_xgb_log.call_args[0][0] is mock_model
+
+
+# ---------------------------------------------------------------------------
+# save_model task
+# ---------------------------------------------------------------------------
+
+
+def test_save_model_task_saves_pkl(tmp_path, monkeypatch):
+    """save_model task must write a .pkl file via joblib.dump."""
+    import training.train as train_module
+
+    monkeypatch.setattr(train_module, "MODEL_PATH", tmp_path / "model.pkl")
+
+    mock_model = MagicMock()
+
+    with patch("training.train.joblib.dump") as mock_dump:
+        train_module.save_model.fn(mock_model)
+
+    mock_dump.assert_called_once()
+    # First argument to joblib.dump must be the model
+    assert mock_dump.call_args[0][0] is mock_model
+
+
+def test_save_model_task_uses_model_path(tmp_path, monkeypatch):
+    """save_model task must dump to MODEL_PATH."""
+    import training.train as train_module
+
+    expected_path = tmp_path / "model.pkl"
+    monkeypatch.setattr(train_module, "MODEL_PATH", expected_path)
+
+    mock_model = MagicMock()
+
+    with patch("training.train.joblib.dump") as mock_dump:
+        train_module.save_model.fn(mock_model)
+
+    assert mock_dump.call_args[0][1] == expected_path
