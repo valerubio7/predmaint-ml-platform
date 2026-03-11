@@ -146,4 +146,4 @@ def monitoring_pipeline() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    monitoring_pipeline()
+    training_pipeline()
