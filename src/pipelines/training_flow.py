@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import joblib
 import mlflow
@@ -34,7 +35,9 @@ def build_features_task(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 
 @task(name="split-data")
-def split_data(X: pd.DataFrame, y: pd.Series, config: dict):
+def split_data(
+    X: pd.DataFrame, y: pd.Series, config: dict
+) -> list[pd.DataFrame | pd.Series]:
     return train_test_split(
         X,
         y,
@@ -45,14 +48,18 @@ def split_data(X: pd.DataFrame, y: pd.Series, config: dict):
 
 
 @task(name="train-model")
-def train_model(X_train, y_train, config: dict) -> XGBClassifier:
+def train_model(
+    X_train: pd.DataFrame, y_train: pd.Series, config: dict
+) -> XGBClassifier:
     model = XGBClassifier(**config["model"]["params"], eval_metric="logloss")
     model.fit(X_train, y_train)
     return model
 
 
 @task(name="evaluate-model")
-def evaluate_model(model, X_test, y_test) -> dict:
+def evaluate_model(
+    model: XGBClassifier, X_test: pd.DataFrame, y_test: pd.Series
+) -> dict:
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
     return {
@@ -82,8 +89,12 @@ def training_pipeline() -> None:
     df = ingest_data(config)
     X, y = build_features_task(df)
     X_train, X_test, y_train, y_test = split_data(X, y, config)
-    model = train_model(X_train, y_train, config)
-    metrics = evaluate_model(model, X_test, y_test)
+    X_train = cast(pd.DataFrame, X_train)
+    X_test = cast(pd.DataFrame, X_test)
+    y_train = cast(pd.Series, y_train)
+    y_test = cast(pd.Series, y_test)
+    model: XGBClassifier = train_model(X_train, y_train, config)  # type: ignore[assignment]
+    metrics: dict = evaluate_model(model, X_test, y_test)
     save_model(model, metrics)
 
     print("Pipeline complete.")
