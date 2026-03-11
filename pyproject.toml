@@ -49,6 +49,9 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:evidently",
+]
 
 [tool.mypy]
 python_version = "3.12"

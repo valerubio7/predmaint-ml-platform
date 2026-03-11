@@ -49,10 +49,10 @@ test: ## Run all tests
 .PHONY: process-data train
 
 process-data: ## Run ingestion and feature engineering pipeline
-	$(PYTHON) $(SRC)/pipelines/pipeline.py
+	$(PYTHON) $(SRC)/data/pipeline.py
 
 train: process-data ## Process data and train the model
-	$(PYTHON) $(SRC)/pipelines/training_flow.py
+	$(PYTHON) $(SRC)/training/train.py
 
 
 # Local Services
@@ -79,7 +79,7 @@ clean: ## Remove Python, linter, and notebook caches
 	rm -rf reports/coverage
 	@echo "Cache cleaned"
 
-reset: ## Reset project to initial state (destructive)
+reset: clean ## Reset project to initial state (destructive)
 	@echo "WARNING: This will delete models, processed data, MLflow runs and the DB. Continue? [y/N] " \
 		&& read ans && [ $${ans:-N} = y ]
 	rm -rf models/*.pkl

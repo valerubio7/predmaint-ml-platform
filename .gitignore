@@ -17,6 +17,7 @@ build/
 # Data & Models
 models/*
 !models/.gitkeep
+data/processed/*
 
 # MLflow
 mlruns/
@@ -31,6 +32,7 @@ mlflow.db
 # Report & Coverage
 reports/coverage/
 reports/figures/
+reports/drift/
 
 # Jupyter
 .ipynb_checkpoints/
