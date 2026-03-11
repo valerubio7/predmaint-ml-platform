@@ -13,7 +13,7 @@ AWS_ACCOUNT="321305251356"
 ECR_REPO="predmaint-api"
 IMAGE_TAG="latest"
 TASK_FAMILY="predmaint-api"
-DOCKERFILE="docker/Dockerfile.api"
+DOCKERFILE="Dockerfile.api"
 MODEL_PATH="models/model.pkl"
 
 ECR_URI="${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}"
@@ -56,7 +56,7 @@ log "AWS identity: $(aws sts get-caller-identity --query 'Arn' --output text)"
 # ─── Step 1: Train the model ──────────────────────────────────────────────────
 if [ "$SKIP_TRAIN" = false ]; then
   log "Step 1/5 — Training the model..."
-  uv run python src/pipelines/training_flow.py
+  uv run python src/training/train.py
   [ -f "$MODEL_PATH" ] || fail "Training finished but $MODEL_PATH not found."
   log "Model saved at $MODEL_PATH ($(du -sh "$MODEL_PATH" | cut -f1))"
 else
