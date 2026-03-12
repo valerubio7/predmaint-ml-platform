@@ -1,107 +1,157 @@
 # PredMaint ML Platform
 
-[![CI](https://img.shields.io/github/actions/workflow/status/tu-usuario/predmaint-ml-platform/ci.yml?branch=main&label=CI&logo=github)](https://github.com/tu-usuario/predmaint-ml-platform/actions)
-[![Deploy](https://img.shields.io/github/actions/workflow/status/tu-usuario/predmaint-ml-platform/deploy.yml?branch=main&label=Deploy&logo=amazonaws)](https://github.com/tu-usuario/predmaint-ml-platform/actions)
-[![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/valerubio7/predmaint-ml-platform/ci.yml?branch=main&label=CI&logo=github)](https://github.com/valerubio7/predmaint-ml-platform/actions/workflows/ci.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/valerubio7/predmaint-ml-platform/deploy.yml?branch=main&label=Deploy&logo=amazonaws)](https://github.com/valerubio7/predmaint-ml-platform/actions/workflows/deploy.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://codecov.io/gh/valerubio7/predmaint-ml-platform)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://codecov.io/gh/tu-usuario/predmaint-ml-platform)
 
-> Plataforma end-to-end de mantenimiento predictivo industrial: detecta fallas de máquinas antes de que ocurran, con reentrenamiento automático ante data drift.
-
----
-
-## ¿Qué hace?
-
-- **Predice fallas industriales** en tiempo real a partir de lecturas de sensores (temperatura, torque, velocidad, desgaste de herramienta) usando XGBoost con manejo explícito del desbalance de clases.
-- **Sirve predicciones vía REST API** (FastAPI) con endpoints `/predict`, `/health` y documentación OpenAPI auto-generada; desplegada en AWS ECS Fargate con zero-downtime.
-- **Detecta data drift automáticamente** con Evidently AI y dispara un pipeline de reentrenamiento orquestado por Prefect — sin intervención manual.
-- **Registra cada experimento** en MLflow (métricas, parámetros, artefactos) con promoción automática del mejor modelo al registry de producción.
-- **Entrega CI/CD completo**: lint con ruff → type checking con mypy → tests con pytest → build Docker → push AWS ECR → deploy ECS, todo en GitHub Actions con OIDC (sin credenciales estáticas).
+**Production-grade MLOps platform for industrial predictive maintenance.** Ingests real sensor data, trains an XGBoost classifier with explicit class-imbalance handling, serves predictions via a REST API deployed on AWS ECS Fargate, and automatically retrains when data drift is detected — with zero manual intervention.
 
 ---
 
-## Stack
+## What This Demonstrates
 
-| Categoría | Tecnologías |
+This project was built to reflect the full scope of an MLOps Engineer role in a production environment:
+
+| Concern | Implementation |
 |---|---|
-| **ML** | scikit-learn, XGBoost, pandas |
-| **API Serving** | FastAPI, Uvicorn, Pydantic |
-| **Experiment Tracking** | MLflow (tracking + model registry) |
-| **Orquestación** | Prefect (flows + tasks) |
-| **Monitoreo ML** | Evidently AI (drift detection) |
-| **Monitoreo Infra** | Prometheus, Grafana |
-| **Containerización** | Docker (multi-stage), Docker Compose |
-| **Cloud** | AWS S3, ECR, ECS Fargate |
-| **CI/CD** | GitHub Actions (OIDC, sin credenciales estáticas) |
-| **Dashboard** | Streamlit |
-| **Calidad de código** | ruff, mypy, pytest, pre-commit |
-| **Lenguaje** | Python 3.12 |
+| **ML Pipeline** | Prefect-orchestrated flow: ingest → feature engineering → stratified split → XGBoost train → MLflow log → artifact push to S3 |
+| **Model Serving** | FastAPI on ECS Fargate; lazy model loading from S3; graceful degradation on startup |
+| **Drift Monitoring** | Evidently AI `DataDriftPreset` vs. a held-out reference set; auto-triggers retraining |
+| **Experiment Tracking** | MLflow tracking server + model registry; every run fully reproducible |
+| **CI/CD** | GitHub Actions: lint → type-check → test → Docker build → ECR push → ECS deploy; OIDC auth (no static credentials) |
+| **Code Quality** | ruff + mypy strict mode + 75+ pytest tests + pre-commit hooks (security, conventional commits) |
+| **Reproducibility** | `uv` lockfile, pinned Python 3.12, YAML-driven config, deterministic seeds |
 
 ---
 
-## Arquitectura
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        CI/CD                                 │
-│  GitHub Push → GitHub Actions                                │
-│  [lint → test → build Docker → push ECR → deploy ECS]       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-          ┌────────────────▼────────────────┐
-          │         AWS ECS Fargate          │
-          │      FastAPI + Uvicorn           │
-          │   /predict  /health  /metrics    │
-          └──────┬──────────────┬───────────┘
-                 │              │
-    ┌────────────▼────┐   ┌─────▼──────────────────┐
-    │  MLflow Server  │   │  Evidently AI           │
-    │  (Tracking +    │   │  (Drift Detection)      │
-    │   Model Reg.)   │   │                         │
-    └─────────────────┘   │  drift? ──► Prefect     │
-                          │             Pipeline     │
-                          │          (retraining)   │
-                          └─────────────────────────┘
-                                       │
-                          ┌────────────▼────────────┐
-                          │  Prometheus + Grafana    │
-                          │  (Infrastructure Mon.)   │
-                          └─────────────────────────┘
-                                       │
-                          ┌────────────▼────────────┐
-                          │  Streamlit Dashboard     │
-                          │  (Demo / Monitoring UI)  │
-                          └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  GitHub Actions CI/CD                                               │
+│  push to main → lint → typecheck → pytest → Docker build            │
+│               → ECR push → ECS task register → blue/green deploy    │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │
+                  ┌────────────────▼────────────────┐
+                  │         AWS ECS Fargate         │
+                  │    FastAPI + Uvicorn (:8000)    │
+                  │   POST /predict   GET /health   │
+                  │   model loaded from S3 at boot  │
+                  └──────┬──────────────┬───────────┘
+                         │              │
+           ┌─────────────▼────┐   ┌─────▼────────────────────────┐
+           │  MLflow Server   │   │  Evidently AI                │
+           │  Tracking +      │   │  DataDriftPreset             │
+           │  Model Registry  │   │  reference vs. production    │
+           └──────────────────┘   │                              │
+                                  │  drift detected?             │
+                                  │       │                      │
+                                  │       ▼                      │
+                                  │  Prefect monitoring_pipeline │
+                                  │  → triggers training_pipeline│
+                                  └──────────────────────────────┘
+                                               │
+                                  ┌────────────▼────────────┐
+                                  │  Streamlit Dashboard    │
+                                  │  live predictions +     │
+                                  │  dataset overview       │
+                                  └─────────────────────────┘
 ```
 
 ---
 
-## Desarrollo Local
+## Tech Stack
 
-Cada componente corre de forma independiente. El orden recomendado es el siguiente:
+| Layer | Technologies |
+|---|---|
+| **ML** | XGBoost 2.1, scikit-learn 1.5, pandas 2.2 |
+| **API** | FastAPI 0.115, Uvicorn 0.34, Pydantic v2 |
+| **Orchestration** | Prefect 3.6 (flows + tasks) |
+| **Experiment Tracking** | MLflow 3.10 (tracking server + model registry) |
+| **Drift Detection** | Evidently AI 0.7 |
+| **Dashboard** | Streamlit 1.55, Plotly 5.24 |
+| **Cloud** | AWS S3, ECR, ECS Fargate (256 CPU / 512 MB) |
+| **Containerization** | Docker multi-stage, non-root user, HEALTHCHECK |
+| **CI/CD** | GitHub Actions + OIDC (no static AWS credentials) |
+| **Package Manager** | uv (astral-sh) with lockfile |
+| **Code Quality** | ruff, mypy (strict), pytest 9, pre-commit, bandit, detect-secrets |
+| **Language** | Python 3.12 |
 
-### 1. Setup inicial
+---
+
+## Model Performance
+
+The model solves a **binary classification problem with ~3.4% failure rate** on the [AI4I 2020 Predictive Maintenance dataset (UCI)](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset) — 10,000 records with 5 sensor features (air temperature, process temperature, rotational speed, torque, tool wear) and a machine type categorical.
+
+| Metric | Value |
+|---|---|
+| ROC-AUC | **0.974** |
+| F1 Score | 0.711 |
+| Recall | 0.779 |
+| Precision | 0.654 |
+
+**Design rationale:** In industrial maintenance, a missed failure (false negative) far outweighs an unnecessary stop (false positive). `scale_pos_weight=29` was set to mirror the 97%/3% class split, explicitly trading precision for recall. ROC-AUC of 0.974 confirms strong discriminative power regardless of threshold.
+
+| Hyperparameter | Value | Rationale |
+|---|---|---|
+| `n_estimators` | 100 | Performance/training-time balance |
+| `max_depth` | 6 | Adequate capacity without overfitting on 10k rows |
+| `learning_rate` | 0.1 | Standard for 100 estimators |
+| `scale_pos_weight` | 29 | Mirrors ~97%/3% class imbalance |
+
+---
+
+## Repository Structure
+
+```
+predmaint-ml-platform/
+├── src/
+│   ├── api/            # FastAPI app — /predict, /health, lifespan model loading
+│   ├── data/           # CSV ingestion, feature engineering, Parquet pipeline
+│   ├── training/       # Prefect flows: training_pipeline + monitoring_pipeline
+│   ├── monitoring/     # Evidently drift detection, reference dataset builder
+│   └── dashboard/      # Streamlit interactive dashboard
+├── tests/              # 75+ pytest tests (unit + integration), all Prefect tasks testable via .fn()
+├── configs/
+│   └── training.yaml   # Dataset paths, split config, XGBoost hyperparameters
+├── .github/
+│   ├── workflows/ci.yml      # lint → typecheck → pytest → Codecov upload
+│   └── workflows/deploy.yml  # ECR push → ECS register → zero-downtime deploy
+├── Dockerfile.api      # Multi-stage build, non-root appuser, HEALTHCHECK
+├── ecs-task.json       # ECS Fargate task definition (256 CPU, 512 MB, awslogs)
+├── Makefile            # Developer workflow: setup, train, run, test, lint, drift, monitor
+└── pyproject.toml      # Project metadata, all deps, ruff/mypy/pytest config
+```
+
+---
+
+## Running Locally
+
+### Prerequisites
+
+- Python 3.12
+- [`uv`](https://github.com/astral-sh/uv) (`pip install uv`)
+- Dataset: download `ai4i2020.csv` from [UCI](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset) and place it at `data/raw/ai4i2020.csv`
+
+### Setup
 
 ```bash
-# Instalar dependencias
-make setup
-
-# Copiar variables de entorno
+make setup          # Install all dependencies via uv
 cp .env.example .env
-
-# Colocar el dataset en data/raw/
-# Fuente: https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset
 ```
 
-### 2. Procesar datos y entrenar el modelo
+### Train the model
 
 ```bash
 make train
-# Ejecuta el pipeline de features y entrena el modelo XGBoost via Prefect.
-# Guarda el modelo en models/model.pkl y registra el experimento en MLflow.
+# Runs the Prefect training pipeline:
+# ingest → feature engineering → XGBoost train → MLflow log → save models/model.pkl
 ```
 
-### 3. FastAPI — API de predicciones
+### Start the API
 
 ```bash
 make run
@@ -110,7 +160,7 @@ make run
 # → http://localhost:8000/docs   (Swagger UI)
 ```
 
-Ejemplo de llamada:
+**Example request:**
 
 ```bash
 curl -X POST http://localhost:8000/predict \
@@ -128,104 +178,62 @@ curl -X POST http://localhost:8000/predict \
 # → {"failure_predicted": false, "failure_probability": 0.0006}
 ```
 
-### 4. MLflow — Tracking de experimentos
+### Other services
 
 ```bash
-make mlflow-ui
-# → http://localhost:5000
+make mlflow-ui      # MLflow tracking UI → http://localhost:5000
+make prefect        # Prefect orchestration UI → http://localhost:4200
+make dashboard      # Streamlit dashboard → http://localhost:8501
+make drift          # Run Evidently drift report → reports/drift/drift_report.html
+make monitor        # Run monitoring pipeline (triggers retraining if drift detected)
 ```
 
-Muestra todos los runs de entrenamiento con sus métricas, y el model registry con las versiones registradas del modelo.
+### Port summary
 
-### 5. Prefect — Orquestación de pipelines
-
-```bash
-uv run prefect server start
-# → http://localhost:4200
-```
-
-Desde la UI se pueden ver los flows ejecutados (training-pipeline, monitoring-pipeline), el historial de runs y los logs de cada task.
-
-> Para correr el pipeline de monitoreo manualmente:
-> ```bash
-> uv run python -c "from src.training.train import monitoring_pipeline; monitoring_pipeline()"
-> ```
-
-### 6. Evidently — Reporte de drift
-
-```bash
-uv run python src/monitoring/drift.py
-# Genera reports/drift/drift_report.html
-```
-
-Abre el archivo HTML generado en el browser para ver el reporte de drift entre los datos de referencia y produccion.
-
-### 7. Streamlit — Dashboard
-
-```bash
-make dashboard
-# → http://localhost:8501
-```
-
-Muestra el estado de la API, permite hacer predicciones interactivas con sliders y visualiza el dataset de entrenamiento.
-
----
-
-### Resumen de puertos
-
-| Servicio | Comando | Puerto |
+| Service | Command | Port |
 |---|---|---|
 | FastAPI | `make run` | 8000 |
 | MLflow UI | `make mlflow-ui` | 5000 |
-| Prefect UI | `uv run prefect server start` | 4200 |
+| Prefect UI | `make prefect` | 4200 |
 | Streamlit | `make dashboard` | 8501 |
 
 ---
 
-## Estructura del Repositorio
+## CI/CD Pipeline
 
-```
-predmaint-ml-platform/
-├── src/
-│   ├── api/            # FastAPI app — endpoints /predict, /health
-│   ├── data/           # Ingesta, transformación y pipeline de features
-│   ├── training/       # Flows de Prefect: entrenamiento + monitoreo
-│   ├── monitoring/     # Detección de drift con Evidently AI
-│   └── dashboard/      # Dashboard interactivo con Streamlit
-├── tests/              # Suite de tests con pytest (unit + integration)
-├── configs/            # Configuración YAML del pipeline de entrenamiento
-├── .github/workflows/  # CI (lint+test) y Deploy (ECR+ECS) en GitHub Actions
-├── Dockerfile.api      # Imagen multi-stage para la API
-└── Makefile            # Comandos de desarrollo (setup, train, lint, test)
-```
+### CI (`.github/workflows/ci.yml`)
 
----
+Triggers on push to `main`/`develop` and pull requests to `main`.
 
-## Resultados del Modelo
+1. **lint** — `ruff check src/` + `ruff format --check src/` + `mypy src/` (strict)
+2. **test** (needs lint) — `pytest --cov=src --cov-report=xml` + Codecov upload
 
-| Métrica | Valor |
-|---|---|
-| ROC-AUC | **0.974** |
-| F1 Score | 0.711 |
-| Recall | 0.779 |
-| Precision | 0.654 |
+### Deploy (`.github/workflows/deploy.yml`)
 
-**Dataset:** AI4I 2020 Predictive Maintenance (UCI) — 10.000 registros, ~3.4% tasa de falla.
+Triggers on push to `main`. Targets the `production` GitHub environment.
 
-**Modelo:** XGBoost con los siguientes hiperparámetros:
-
-| Parámetro | Valor | Justificación |
-|---|---|---|
-| `n_estimators` | 100 | Balance entre rendimiento y tiempo de entrenamiento |
-| `max_depth` | 6 | Suficiente capacidad sin sobreajuste en un dataset de 10k filas |
-| `learning_rate` | 0.1 | Estándar para XGBoost con 100 árboles |
-| `scale_pos_weight` | 29 | Ratio de desbalance de clases (~97% negativo / ~3% positivo) |
-
-**Decisión de diseño:** en mantenimiento predictivo industrial, un falso negativo (no detectar una falla real) tiene un costo mucho mayor que un falso positivo (parar una máquina innecesariamente). Por eso se priorizó **Recall alto (0.779)** — el modelo detecta el 78% de las fallas reales — y se aceptó una Precision menor. El ROC-AUC de **0.974** indica excelente capacidad discriminativa del clasificador independientemente del umbral.
+1. AWS authentication via **OIDC** (`AWS_DEPLOY_ROLE_ARN`) — no static credentials stored anywhere
+2. Build Docker image → push to ECR with `${{ github.sha }}` and `latest` tags
+3. Register new ECS task definition from `ecs-task.json`
+4. `aws ecs update-service --force-new-deployment` on `predmaint-cluster/predmaint-api`
+5. `aws ecs wait services-stable` — blocks until zero-downtime deployment completes
+6. Deregister all inactive task definitions (keeps ECS clean)
 
 ---
 
-## Autor
+## Key Engineering Decisions
 
-**Valentín Rubio**
-[LinkedIn](https://linkedin.com/in/tu-perfil) · [GitHub](https://github.com/tu-usuario) · [tu@email.com](mailto:tu@email.com)
+- **OIDC over static credentials:** The only AWS secret stored in GitHub is a role ARN. No access keys anywhere in the codebase or CI environment.
+- **Graceful API degradation:** The server starts even if the model artifact is unavailable. `/health` always responds 200; `/predict` returns 503 until the model loads — so ECS health checks pass during cold starts.
+- **Prefect tasks testable without a server:** All `@task` functions expose a `.fn()` attribute used in the entire test suite — no Prefect orchestration server needed to run tests.
+- **XGBoost column safety:** Feature names are sanitized at transform time (strip `[`, `]`, `<`) to avoid XGBoost's strict column name validation.
+- **Dual model loading:** `MODEL_PATH` accepts either a local file path (development) or an `s3://` URI (production), resolved at startup in the FastAPI `lifespan` handler.
+- **Deterministic training:** Fixed `random_state=42` in the stratified split, pinned dependency lockfile, and YAML-driven hyperparameters ensure fully reproducible experiments.
+
+---
+
+## Author
+
+**Valentín Rubio** — MLOps / ML Engineer
+
+[LinkedIn](https://www.linkedin.com/in/rubiovalentin) · [GitHub](https://github.com/valerubio7)
