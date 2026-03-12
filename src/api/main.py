@@ -12,7 +12,13 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = os.getenv("MODEL_PATH", "models/model.pkl")
+_raw_model_path = os.getenv("MODEL_PATH", "models/model.pkl")
+# Normalize s3:/ → s3:// in case SSM value was stored with a single slash
+MODEL_PATH = (
+    "s3://" + _raw_model_path[len("s3:/") :]
+    if _raw_model_path.startswith("s3:/") and not _raw_model_path.startswith("s3://")
+    else _raw_model_path
+)
 API_ENV = os.getenv("API_ENV", "development")
 
 _model = None
