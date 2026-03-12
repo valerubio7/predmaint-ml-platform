@@ -103,5 +103,20 @@ jobs:
             --cluster $ECS_CLUSTER \
             --services $ECS_SERVICE
 
+      - name: Deregister old task definitions
+        run: |
+          # Keep only the active task definition, deregister everything else
+          ACTIVE=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER --services $ECS_SERVICE \
+            --query "services[0].taskDefinition" --output text)
+          ALL=$(aws ecs list-task-definitions \
+            --family-prefix $ECS_SERVICE --status ACTIVE \
+            --query "taskDefinitionArns[]" --output text)
+          for ARN in $ALL; do
+            if [ "$ARN" != "$ACTIVE" ]; then
+              aws ecs deregister-task-definition --task-definition $ARN --output none
+            fi
+          done
+
       - name: Print deployed image
         run: echo "Deployed image ${{ steps.build.outputs.image }}"
