@@ -76,34 +76,42 @@
 
 ---
 
-## Quick Start
+## Desarrollo Local
+
+Cada componente corre de forma independiente. El orden recomendado es el siguiente:
+
+### 1. Setup inicial
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/tu-usuario/predmaint-ml-platform.git
-cd predmaint-ml-platform
+# Instalar dependencias
+make setup
 
-# 2. Configurar entorno
+# Copiar variables de entorno
 cp .env.example .env
-# Editar .env con tus valores (MLflow URI, AWS credentials, etc.)
 
-# 3. Instalar dependencias (requiere uv)
-uv sync --group dev
-
-# 4. Descargar el dataset
-# Colocar ai4i2020.csv en data/raw/
+# Colocar el dataset en data/raw/
 # Fuente: https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset
-
-# 5. Entrenar el modelo
-make train
-
-# 6. Levantar la API localmente
-make run
-# → API disponible en http://localhost:8000
-# → Docs en http://localhost:8000/docs
 ```
 
-**Ejemplo de predicción:**
+### 2. Procesar datos y entrenar el modelo
+
+```bash
+make train
+# Ejecuta el pipeline de features y entrena el modelo XGBoost via Prefect.
+# Guarda el modelo en models/model.pkl y registra el experimento en MLflow.
+```
+
+### 3. FastAPI — API de predicciones
+
+```bash
+make run
+# → http://localhost:8000/predict
+# → http://localhost:8000/health
+# → http://localhost:8000/docs   (Swagger UI)
+```
+
+Ejemplo de llamada:
+
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
@@ -117,7 +125,60 @@ curl -X POST http://localhost:8000/predict \
     "type_l": 1,
     "type_m": 0
   }'
+# → {"failure_predicted": false, "failure_probability": 0.0006}
 ```
+
+### 4. MLflow — Tracking de experimentos
+
+```bash
+make mlflow-ui
+# → http://localhost:5000
+```
+
+Muestra todos los runs de entrenamiento con sus métricas, y el model registry con las versiones registradas del modelo.
+
+### 5. Prefect — Orquestación de pipelines
+
+```bash
+uv run prefect server start
+# → http://localhost:4200
+```
+
+Desde la UI se pueden ver los flows ejecutados (training-pipeline, monitoring-pipeline), el historial de runs y los logs de cada task.
+
+> Para correr el pipeline de monitoreo manualmente:
+> ```bash
+> uv run python -c "from src.training.train import monitoring_pipeline; monitoring_pipeline()"
+> ```
+
+### 6. Evidently — Reporte de drift
+
+```bash
+uv run python src/monitoring/drift.py
+# Genera reports/drift/drift_report.html
+```
+
+Abre el archivo HTML generado en el browser para ver el reporte de drift entre los datos de referencia y produccion.
+
+### 7. Streamlit — Dashboard
+
+```bash
+make dashboard
+# → http://localhost:8501
+```
+
+Muestra el estado de la API, permite hacer predicciones interactivas con sliders y visualiza el dataset de entrenamiento.
+
+---
+
+### Resumen de puertos
+
+| Servicio | Comando | Puerto |
+|---|---|---|
+| FastAPI | `make run` | 8000 |
+| MLflow UI | `make mlflow-ui` | 5000 |
+| Prefect UI | `uv run prefect server start` | 4200 |
+| Streamlit | `make dashboard` | 8501 |
 
 ---
 
@@ -142,17 +203,25 @@ predmaint-ml-platform/
 
 ## Resultados del Modelo
 
-<!-- TODO: completar con métricas reales después de la primera ejecución completa -->
-
 | Métrica | Valor |
 |---|---|
-| F1 Score | `[0.XX]` |
-| Precision | `[0.XX]` |
-| Recall | `[0.XX]` |
-| ROC-AUC | `[0.XX]` |
+| ROC-AUC | **0.974** |
+| F1 Score | 0.711 |
+| Recall | 0.779 |
+| Precision | 0.654 |
 
-> Dataset: AI4I 2020 Predictive Maintenance (UCI) — 10.000 registros, ~3.4% tasa de falla.
-> Modelo: XGBoost con `scale_pos_weight=29` para corregir el desbalance de clases.
+**Dataset:** AI4I 2020 Predictive Maintenance (UCI) — 10.000 registros, ~3.4% tasa de falla.
+
+**Modelo:** XGBoost con los siguientes hiperparámetros:
+
+| Parámetro | Valor | Justificación |
+|---|---|---|
+| `n_estimators` | 100 | Balance entre rendimiento y tiempo de entrenamiento |
+| `max_depth` | 6 | Suficiente capacidad sin sobreajuste en un dataset de 10k filas |
+| `learning_rate` | 0.1 | Estándar para XGBoost con 100 árboles |
+| `scale_pos_weight` | 29 | Ratio de desbalance de clases (~97% negativo / ~3% positivo) |
+
+**Decisión de diseño:** en mantenimiento predictivo industrial, un falso negativo (no detectar una falla real) tiene un costo mucho mayor que un falso positivo (parar una máquina innecesariamente). Por eso se priorizó **Recall alto (0.779)** — el modelo detecta el 78% de las fallas reales — y se aceptó una Precision menor. El ROC-AUC de **0.974** indica excelente capacidad discriminativa del clasificador independientemente del umbral.
 
 ---
 

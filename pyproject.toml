@@ -5,6 +5,7 @@ description = "End-to-End Predictive Maintenance with Automated Retraining, Drif
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.42.66",
     "evidently>=0.7.20",
     "fastapi>=0.115.0",
     "joblib>=1.5.3",
@@ -22,6 +23,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "boto3-stubs[s3]>=1.42.66",
     "mypy>=1.19.1",
     "pandas-stubs>=3.0.0.260204",
     "pre-commit>=4.5.1",

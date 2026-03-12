@@ -31,7 +31,8 @@
 
 			"environment": [
 				{ "name": "API_ENV", "value": "production" },
-				{ "name": "API_PORT", "value": "8000" }
+				{ "name": "API_PORT", "value": "8000" },
+				{ "name": "AWS_DEFAULT_REGION", "value": "us-east-2" }
 			],
 
 			"secrets": [

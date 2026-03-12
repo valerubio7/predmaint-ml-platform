@@ -39,10 +39,13 @@ check: lint typecheck ## Run lint + typecheck (ideal before committing)
 
 
 # Tests
-.PHONY: test test-fast test-cov
+.PHONY: test test-cov
 
 test: ## Run all tests
 	$(UV) pytest $(TESTS)
+
+test-cov: ## Run tests with coverage report
+	$(UV) pytest $(TESTS) --cov=$(SRC) --cov-report=term-missing
 
 
 # Data And Training Pipeline
@@ -56,7 +59,7 @@ train: process-data ## Process data and train the model
 
 
 # Local Services
-.PHONY: run mlflow-ui dashboard
+.PHONY: run mlflow-ui prefect dashboard drift monitor
 
 run: ## Start the API in development mode (hot reload)
 	$(UV) uvicorn $(SRC).api.main:app --reload --port $(PORT)
@@ -64,8 +67,17 @@ run: ## Start the API in development mode (hot reload)
 mlflow-ui: ## Open MLflow UI at http://localhost:5000
 	$(UV) mlflow ui
 
-dashboard: ## Start the Streamlit dashboard
+prefect: ## Start the Prefect server at http://localhost:4200
+	$(UV) prefect server start
+
+dashboard: ## Start the Streamlit dashboard at http://localhost:8501
 	$(UV) streamlit run $(SRC)/dashboard/app.py
+
+drift: ## Generate Evidently drift report → reports/drift/drift_report.html
+	$(PYTHON) $(SRC)/monitoring/drift.py
+
+monitor: ## Run the monitoring + auto-retraining pipeline
+	$(PYTHON) -c "from src.training.train import monitoring_pipeline; monitoring_pipeline()"
 
 
 # Cleanup
@@ -84,7 +96,7 @@ reset: clean ## Reset project to initial state (destructive)
 		&& read ans && [ $${ans:-N} = y ]
 	rm -rf models/*.pkl
 	rm -rf data/processed/
-	rm -rf mlruns/ mlflow.db
+	rm -rf mlruns/ mlflow.db mlartifacts/
 	rm -rf reports/
 	rm -rf .venv/
 	@echo "Project reset — run 'make setup' to reinitialize"
