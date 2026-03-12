@@ -40,10 +40,11 @@ def client_no_model(tmp_path, monkeypatch):
     """TestClient pointing to a path where no model.pkl exists."""
     import api.main as main_module
 
-    monkeypatch.setenv("MODEL_PATH", str(tmp_path / "nonexistent.pkl"))
-    # Reset lazy-loaded model so the new path is respected
+    missing_path = str(tmp_path / "nonexistent.pkl")
+    monkeypatch.setenv("MODEL_PATH", missing_path)
+    # Reset lazy-loaded model and module-level MODEL_PATH so the new path is respected
     main_module._model = None
-    main_module.MODEL_PATH = tmp_path / "nonexistent.pkl"
+    main_module.MODEL_PATH = missing_path
 
     from api.main import app
 

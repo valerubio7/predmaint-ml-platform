@@ -1,40 +1,95 @@
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import boto3
 import joblib
 import pandas as pd
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sklearn.pipeline import Pipeline
 
-MODEL_PATH = Path(os.getenv("MODEL_PATH", "models/model.pkl"))
+logger = logging.getLogger(__name__)
+
+MODEL_PATH = os.getenv("MODEL_PATH", "models/model.pkl")
 API_ENV = os.getenv("API_ENV", "development")
+
+_model = None
+_LOCAL_MODEL_CACHE = Path("/tmp/model.pkl")  # nosec B108 — standard cache dir in containers
+
+
+def _download_from_s3(s3_uri: str) -> Path:
+    """Download a model from an S3 URI (s3://bucket/key) to a local cache path."""
+    if not s3_uri.startswith("s3://"):
+        raise ValueError(f"Expected s3:// URI, got: {s3_uri}")
+
+    uri = s3_uri[len("s3://") :]
+    bucket, _, key = uri.partition("/")
+    if not bucket or not key:
+        raise ValueError(f"Invalid S3 URI: {s3_uri}")
+
+    logger.info("Downloading model from %s", s3_uri)
+    try:
+        s3 = boto3.client("s3")
+        _LOCAL_MODEL_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        s3.download_file(bucket, key, str(_LOCAL_MODEL_CACHE))
+        logger.info("Model downloaded to %s", _LOCAL_MODEL_CACHE)
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to download model from {s3_uri}: {e}",
+        )
+    return _LOCAL_MODEL_CACHE
+
+
+def _resolve_model_path() -> Path:
+    """Return a local Path to the model, downloading from S3 if needed."""
+    if MODEL_PATH.startswith("s3://"):
+        return _download_from_s3(MODEL_PATH)
+
+    local = Path(MODEL_PATH)
+    if not local.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Model not found at {local}. "
+                "Train the model or set MODEL_PATH to an s3:// URI."
+            ),
+        )
+    return local
+
+
+def get_model():
+    """Load the model lazily, downloading from S3 when MODEL_PATH is an s3:// URI."""
+    global _model
+    if _model is None:
+        path = _resolve_model_path()
+        _model = joblib.load(path)
+    return _model
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: ARG001
+    """Pre-load the model at startup so the first request isn't slow.
+
+    Logs a warning if the model is unavailable rather than crashing the server —
+    /health will still respond while /predict returns 503 until the model is ready.
+    """
+    try:
+        get_model()
+        logger.info("Model loaded successfully (env=%s)", API_ENV)
+    except HTTPException as e:
+        logger.warning("Model not available at startup: %s", e.detail)
+    yield
+
 
 app = FastAPI(
     title="PredMaint API",
     description="Predictive maintenance inference API",
     version="0.1.0",
+    lifespan=lifespan,
 )
-
-_model: Pipeline | None = None
-
-
-def get_model() -> Pipeline:
-    """Load the model lazily; raises 503 if the file is not yet present."""
-    global _model
-    if _model is None:
-        if not MODEL_PATH.exists():
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    f"Model not found at {MODEL_PATH}. "
-                    "Train the model and copy model.pkl into the models/ directory."
-                ),
-            )
-        _model = joblib.load(MODEL_PATH)
-    if _model is None:
-        raise RuntimeError(f"Model loaded from {MODEL_PATH} is None")
-    return _model
 
 
 class SensorData(BaseModel):
