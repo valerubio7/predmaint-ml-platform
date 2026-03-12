@@ -84,9 +84,14 @@ jobs:
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Force new ECS deployment
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
+          # Inject the exact image SHA into the task definition before registering
+          TASK_DEF=$(jq --arg img "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $img' ecs-task.json)
           NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://ecs-task.json \
+            --cli-input-json "$TASK_DEF" \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
           aws ecs update-service \
@@ -104,19 +109,22 @@ jobs:
             --services $ECS_SERVICE
 
       - name: Deregister old task definitions
+        continue-on-error: true
         run: |
           # Keep only the active task definition, deregister everything else
           ACTIVE=$(aws ecs describe-services \
             --cluster $ECS_CLUSTER --services $ECS_SERVICE \
-            --query "services[0].taskDefinition" --output text)
-          ALL=$(aws ecs list-task-definitions \
+            --query "services[0].taskDefinition" --output text | tr -d '[:space:]')
+          aws ecs list-task-definitions \
             --family-prefix $ECS_SERVICE --status ACTIVE \
-            --query "taskDefinitionArns[]" --output text)
-          for ARN in $ALL; do
-            if [ "$ARN" != "$ACTIVE" ]; then
-              aws ecs deregister-task-definition --task-definition $ARN --output none
-            fi
-          done
+            --query "taskDefinitionArns[]" --output text \
+          | tr '\t' '\n' \
+          | tr -d '[:space:]' \
+          | while read -r ARN; do
+              if [ -n "$ARN" ] && [ "$ARN" != "$ACTIVE" ]; then
+                aws ecs deregister-task-definition --task-definition "$ARN" --output none
+              fi
+            done
 
       - name: Print deployed image
         run: echo "Deployed image ${{ steps.build.outputs.image }}"
