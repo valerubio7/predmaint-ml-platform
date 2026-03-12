@@ -85,9 +85,14 @@ jobs:
 
       - name: Force new ECS deployment
         run: |
+          NEW_TASK_DEF=$(aws ecs register-task-definition \
+            --cli-input-json file://ecs-task.json \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE \
+            --task-definition $NEW_TASK_DEF \
             --force-new-deployment \
             --query "service.deployments[0].status" \
             --output text

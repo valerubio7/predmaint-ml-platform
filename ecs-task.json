@@ -24,22 +24,16 @@
 					"python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"
 				],
 				"interval": 30,
-				"timeout": 5,
+				"timeout": 10,
 				"retries": 3,
-				"startPeriod": 10
+				"startPeriod": 60
 			},
 
 			"environment": [
 				{ "name": "API_ENV", "value": "production" },
 				{ "name": "API_PORT", "value": "8000" },
-				{ "name": "AWS_DEFAULT_REGION", "value": "us-east-2" }
-			],
-
-			"secrets": [
-				{
-					"name": "MODEL_PATH",
-					"valueFrom": "arn:aws:ssm:us-east-2:321305251356:parameter/predmaint/MODEL_PATH"
-				}
+				{ "name": "AWS_DEFAULT_REGION", "value": "us-east-2" },
+				{ "name": "MODEL_PATH", "value": "s3://predmaint-ml-platform/models/model.pkl" }
 			],
 
 			"readonlyRootFilesystem": false,
