@@ -31,7 +31,10 @@ COPY configs/ ./configs/
 
 # Pre-create models dir — API returns 503 on /predict until a model is present
 # Mount at runtime with: -v ./models:/app/models
-RUN mkdir -p models && chown -R appuser:appgroup /app
+RUN mkdir -p models && \
+    mkdir -p /home/appuser/.cache/uv && \
+    chown -R appuser:appgroup /app && \
+    chown -R appuser:appgroup /home/appuser
 
 USER appuser
 
