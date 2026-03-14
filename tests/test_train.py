@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from tests.conftest import make_raw_csv
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -38,29 +40,9 @@ def _make_target(rows: int = 200) -> pd.Series:
     return pd.Series(rng.integers(0, 2, rows))
 
 
-def _make_config(tmp_path: Path) -> dict:
-    """Return a minimal config dict pointing to a temp raw CSV."""
-
-    types = ["L", "M", "H"] * 34  # 102 rows
-    data = {
-        "UDI": list(range(1, 103)),
-        "Product ID": [f"M{i}" for i in range(102)],
-        "Type": types[:102],
-        "Air temperature [K]": [300.0] * 102,
-        "Process temperature [K]": [310.0] * 102,
-        "Rotational speed [rpm]": [1500] * 102,
-        "Torque [Nm]": [40.0] * 102,
-        "Tool wear [min]": [0] * 102,
-        "Machine failure": [0] * 95 + [1] * 7,
-        "TWF": [0] * 102,
-        "HDF": [0] * 102,
-        "PWF": [0] * 102,
-        "OSF": [0] * 102,
-        "RNF": [0] * 102,
-    }
-    csv_path = tmp_path / "raw.csv"
-    pd.DataFrame(data).to_csv(csv_path, index=False)
-
+def _make_training_config(tmp_path: Path) -> dict:
+    """Return a minimal training config dict wired to a temp raw CSV."""
+    csv_path = make_raw_csv(tmp_path, rows=102)
     return {
         "data": {
             "raw_path": str(csv_path),
@@ -108,7 +90,7 @@ def test_ingest_data_task_returns_dataframe(tmp_path):
     """ingest_data task must return a pd.DataFrame."""
     from training.train import ingest_data
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     result = ingest_data.fn(config)
     assert isinstance(result, pd.DataFrame)
 
@@ -117,7 +99,7 @@ def test_ingest_data_task_has_expected_rows(tmp_path):
     """ingest_data task must return 102 rows (our minimal CSV)."""
     from training.train import ingest_data
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     result = ingest_data.fn(config)
     assert len(result) == 102
 
@@ -131,7 +113,7 @@ def test_build_features_task_returns_tuple(tmp_path):
     """build_features_task must return a (DataFrame, Series) tuple."""
     from training.train import build_features_task, ingest_data
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     df = ingest_data.fn(config)
     X, y = build_features_task.fn(df)
     assert isinstance(X, pd.DataFrame)
@@ -142,7 +124,7 @@ def test_build_features_task_feature_count(tmp_path):
     """Feature matrix must have 8 columns."""
     from training.train import build_features_task, ingest_data
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     df = ingest_data.fn(config)
     X, _ = build_features_task.fn(df)
     assert X.shape[1] == 8
@@ -198,15 +180,12 @@ def test_split_data_task_stratified():
     from training.train import split_data
 
     n = 200
-    # Imbalanced: 90% 0, 10% 1
     y = pd.Series([0] * 180 + [1] * 20)
     X = _make_feature_df(n)
     config = {"data": {"test_size": 0.2, "random_state": 0}}
 
     _, _, y_train, y_test = split_data.fn(X, y, config)
-    train_pos_rate = y_train.mean()
-    test_pos_rate = y_test.mean()
-    assert abs(train_pos_rate - test_pos_rate) < 0.10
+    assert abs(y_train.mean() - y_test.mean()) < 0.10
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +199,7 @@ def test_train_model_task_returns_classifier(tmp_path):
 
     from training.train import split_data, train_model
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
     y = _make_target(200)
     split_cfg = {"data": {"test_size": 0.2, "random_state": 42}}
@@ -234,7 +213,7 @@ def test_train_model_task_is_fitted(tmp_path):
     """Returned model must be fitted (can call predict)."""
     from training.train import split_data, train_model
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
     y = _make_target(200)
     split_cfg = {"data": {"test_size": 0.2, "random_state": 42}}
@@ -254,7 +233,7 @@ def test_evaluate_model_task_returns_dict(tmp_path):
     """evaluate_model task must return a dict."""
     from training.train import evaluate_model, split_data, train_model
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
     y = _make_target(200)
     split_cfg = {"data": {"test_size": 0.2, "random_state": 42}}
@@ -269,7 +248,7 @@ def test_evaluate_model_task_has_required_keys(tmp_path):
     """Metrics dict must contain f1, precision, recall, roc_auc."""
     from training.train import evaluate_model, split_data, train_model
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
     y = _make_target(200)
     split_cfg = {"data": {"test_size": 0.2, "random_state": 42}}
@@ -285,7 +264,7 @@ def test_evaluate_model_task_values_in_range(tmp_path):
     """All metric values must be floats in [0, 1]."""
     from training.train import evaluate_model, split_data, train_model
 
-    config = _make_config(tmp_path)
+    config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
     y = _make_target(200)
     split_cfg = {"data": {"test_size": 0.2, "random_state": 42}}
@@ -302,7 +281,7 @@ def test_evaluate_model_task_values_in_range(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_log_to_mlflow_task_calls_log_metrics(tmp_path):
+def test_log_to_mlflow_task_calls_log_metrics():
     """log_to_mlflow task must call mlflow.log_metrics with all 4 metrics."""
     from training.train import log_to_mlflow
 
@@ -323,7 +302,7 @@ def test_log_to_mlflow_task_calls_log_metrics(tmp_path):
     mock_log.assert_called_once_with(metrics)
 
 
-def test_log_to_mlflow_task_registers_model(tmp_path):
+def test_log_to_mlflow_task_registers_model():
     """log_to_mlflow task must call mlflow.xgboost.log_model."""
     from training.train import log_to_mlflow
 
@@ -356,14 +335,12 @@ def test_save_model_task_saves_pkl(tmp_path, monkeypatch):
     import training.train as train_module
 
     monkeypatch.setattr(train_module, "MODEL_PATH", tmp_path / "model.pkl")
-
     mock_model = MagicMock()
 
     with patch("training.train.joblib.dump") as mock_dump:
         train_module.save_model.fn(mock_model)
 
     mock_dump.assert_called_once()
-    # First argument to joblib.dump must be the model
     assert mock_dump.call_args[0][0] is mock_model
 
 
@@ -373,7 +350,6 @@ def test_save_model_task_uses_model_path(tmp_path, monkeypatch):
 
     expected_path = tmp_path / "model.pkl"
     monkeypatch.setattr(train_module, "MODEL_PATH", expected_path)
-
     mock_model = MagicMock()
 
     with patch("training.train.joblib.dump") as mock_dump:

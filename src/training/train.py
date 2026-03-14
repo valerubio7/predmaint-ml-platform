@@ -14,7 +14,6 @@ from xgboost import XGBClassifier
 from data.loader import load_raw_data
 from data.pipeline import load_config
 from data.transformer import build_features
-from monitoring.drift import detect_drift
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +21,10 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "predmaint")
 MLFLOW_MODEL_NAME = os.getenv("MLFLOW_MODEL_NAME", "predmaint-classifier")
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "models/model.pkl"))
-RETRAINING_TRIGGER = os.getenv("RETRAINING_TRIGGER", "true").lower() == "true"
-
-# Number of rows used as production sample when checking drift.
-# Must be <= total dataset rows; rows beyond this index are treated as "new" data.
-PRODUCTION_SAMPLE_START_ROW = int(os.getenv("PRODUCTION_SAMPLE_START_ROW", "7000"))
 
 
 @task(name="load-config")
 def load_config_task() -> dict:
-    """Load training configuration. Delegates to data.pipeline.load_config."""
     return load_config()
 
 
@@ -46,17 +39,14 @@ def build_features_task(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 
 @task(name="split-data")
-def split_data(
-    X: pd.DataFrame, y: pd.Series, config: dict
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    X_train, X_test, y_train, y_test = train_test_split(
+def split_data(X: pd.DataFrame, y: pd.Series, config: dict) -> list:
+    return train_test_split(
         X,
         y,
         test_size=config["data"]["test_size"],
         random_state=config["data"]["random_state"],
         stratify=y,
     )
-    return X_train, X_test, y_train, y_test
 
 
 @task(name="train-model")
@@ -84,7 +74,6 @@ def evaluate_model(
 
 @task(name="log-to-mlflow")
 def log_to_mlflow(model: XGBClassifier, metrics: dict) -> None:
-    """Register model and metrics in MLflow."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
     with mlflow.start_run():
@@ -96,7 +85,6 @@ def log_to_mlflow(model: XGBClassifier, metrics: dict) -> None:
 
 @task(name="save-model")
 def save_model(model: XGBClassifier) -> None:
-    """Persist the trained model to disk."""
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     logger.info("Model saved: %s", MODEL_PATH)
@@ -109,39 +97,13 @@ def training_pipeline() -> None:
     X, y = build_features_task(df)
     X_train, X_test, y_train, y_test = split_data(X, y, config)
     model: XGBClassifier = train_model(X_train, y_train, config)  # type: ignore[assignment]
-    metrics: dict = evaluate_model(model, X_test, y_test)
+    metrics: dict = evaluate_model(model, X_test, y_test)  # type: ignore[assignment]
     log_to_mlflow(model, metrics)
     save_model(model)
 
     logger.info("Pipeline complete.")
     for k, v in metrics.items():
         logger.info("  %s: %.4f", k, v)
-
-
-@task(name="check-drift")
-def check_drift(config: dict) -> bool:
-    """Check if production data has drifted from reference."""
-    df = load_raw_data(Path(config["data"]["raw_path"]))
-    X, _ = build_features(df)
-    production_sample = X.iloc[PRODUCTION_SAMPLE_START_ROW:]
-    result = detect_drift(production_sample)
-    logger.info("Drift detected: %s", result["drift_detected"])
-    return result["drift_detected"]
-
-
-@flow(name="monitoring-pipeline")
-def monitoring_pipeline() -> None:
-    """Run drift detection and trigger retraining if needed."""
-    config = load_config_task()
-    drift = check_drift(config)
-
-    if drift and RETRAINING_TRIGGER:
-        logger.info("Drift detected — triggering retraining...")
-        training_pipeline()
-    elif drift:
-        logger.info("Drift detected — retraining disabled by RETRAINING_TRIGGER.")
-    else:
-        logger.info("No drift detected — model is stable.")
 
 
 if __name__ == "__main__":
