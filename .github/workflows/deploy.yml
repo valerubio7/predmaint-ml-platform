@@ -1,6 +1,6 @@
 # Deploy to AWS ECS Fargate
 #
-# Triggered on every push to main after CI passes.
+# Triggered on every push to main.
 # Uses OIDC (no static AWS credentials) — requires one-time setup:
 #
 #   1. Create an IAM OIDC Identity Provider in AWS:
@@ -12,7 +12,7 @@
 #          "Version": "2012-10-17",
 #          "Statement": [{
 #            "Effect": "Allow",
-#            "Principal": { "Federated": "arn:aws:iam::321305251356:oidc-provider/token.actions.githubusercontent.com" },
+#            "Principal": { "Federated": "arn:aws:iam::<AWS_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com" },
 #            "Action": "sts:AssumeRoleWithWebIdentity",
 #            "Condition": {
 #              "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
@@ -20,13 +20,14 @@
 #            }
 #          }]
 #        }
-#      Attach the following managed / inline permissions:
+#      Attach the following permissions:
 #        - AmazonEC2ContainerRegistryPowerUser
 #        - ecs:UpdateService, ecs:DescribeServices (on predmaint-cluster/predmaint-api)
 #        - iam:PassRole (on ecsTaskExecutionRole and ecsTaskRole)
 #
-#   3. Add a single GitHub Secret to the repository:
-#        AWS_DEPLOY_ROLE_ARN = arn:aws:iam::321305251356:role/github-actions-deploy
+#   3. Add the following GitHub Secrets to the repository:
+#        AWS_ACCOUNT_ID      = your 12-digit AWS account ID
+#        AWS_DEPLOY_ROLE_ARN = arn:aws:iam::<AWS_ACCOUNT_ID>:role/github-actions-deploy
 
 name: Deploy
 
@@ -39,12 +40,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-production
   cancel-in-progress: false  # never cancel an in-flight deploy
 
 env:
   AWS_REGION: us-east-2
-  ECR_REGISTRY: 321305251356.dkr.ecr.us-east-2.amazonaws.com
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
   ECR_REPOSITORY: predmaint-api
   ECS_CLUSTER: predmaint-cluster
   ECS_SERVICE: predmaint-api
@@ -54,7 +55,6 @@ jobs:
     name: Build, Push & Deploy
     runs-on: ubuntu-latest
     environment: production
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +87,6 @@ jobs:
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Inject the exact image SHA into the task definition before registering
           TASK_DEF=$(jq --arg img "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
             '.containerDefinitions[0].image = $img' ecs-task.json)
           NEW_TASK_DEF=$(aws ecs register-task-definition \
@@ -107,24 +106,6 @@ jobs:
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_SERVICE
-
-      - name: Deregister old task definitions
-        continue-on-error: true
-        run: |
-          # Keep only the active task definition, deregister everything else
-          ACTIVE=$(aws ecs describe-services \
-            --cluster $ECS_CLUSTER --services $ECS_SERVICE \
-            --query "services[0].taskDefinition" --output text | tr -d '[:space:]')
-          aws ecs list-task-definitions \
-            --family-prefix $ECS_SERVICE --status ACTIVE \
-            --query "taskDefinitionArns[]" --output text \
-          | tr '\t' '\n' \
-          | tr -d '[:space:]' \
-          | while read -r ARN; do
-              if [ -n "$ARN" ] && [ "$ARN" != "$ACTIVE" ]; then
-                aws ecs deregister-task-definition --task-definition "$ARN" --output none
-              fi
-            done
 
       - name: Print deployed image
         run: echo "Deployed image ${{ steps.build.outputs.image }}"

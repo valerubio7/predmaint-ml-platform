@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: ["**"]
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -60,4 +60,4 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           file: coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
