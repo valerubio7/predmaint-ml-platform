@@ -13,28 +13,30 @@ CONFIG_PATH = Path("configs/training.yaml")
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
-    """Load training configuration from YAML file."""
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
     with open(path) as f:
         return yaml.safe_load(f)
 
 
+def _save_features(X: pd.DataFrame, y: pd.Series, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    X.assign(target=y).to_parquet(path, index=False)
+    logger.info("Saved to: %s", path)
+
+
 def run_pipeline(config: dict) -> tuple[pd.DataFrame, pd.Series]:
-    """Run full data pipeline: ingest → build features → save."""
     raw_path = Path(config["data"]["raw_path"])
     processed_path = Path(config["data"]["processed_path"])
-
-    processed_path.parent.mkdir(parents=True, exist_ok=True)
 
     df = load_raw_data(raw_path)
     X, y = build_features(df)
 
-    output = X.copy()
-    output["target"] = y
-    output.to_parquet(processed_path, index=False)
+    _save_features(X, y, processed_path)
 
-    logger.info("Pipeline complete.")
-    logger.info("Features: %d columns, %d rows", X.shape[1], X.shape[0])
-    logger.info("Saved to: %s", processed_path)
+    logger.info(
+        "Pipeline complete. Features: %d columns, %d rows", X.shape[1], X.shape[0]
+    )
 
     return X, y
 

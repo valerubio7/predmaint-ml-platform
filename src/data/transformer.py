@@ -2,37 +2,37 @@ import re
 
 import pandas as pd
 
-FEATURE_COLUMNS = [
-    "Air temperature [K]",
-    "Process temperature [K]",
-    "Rotational speed [rpm]",
-    "Torque [Nm]",
-    "Tool wear [min]",
-]
-
 TARGET_COLUMN = "Machine failure"
 CATEGORICAL_COLUMN = "Type"
 DROP_COLUMNS = ["UDI", "Product ID", "TWF", "HDF", "PWF", "OSF", "RNF"]
 
+_XGBOOST_ILLEGAL_CHARS = re.compile(r"[\[\]<]")
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _sanitize_column_name(name: str) -> str:
+    cleaned = _XGBOOST_ILLEGAL_CHARS.sub("", name).strip()
+    return _WHITESPACE.sub("_", cleaned)
+
 
 def _sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Replace characters not allowed in XGBoost feature names ([ ] <)."""
-    df.columns = [re.sub(r"[\[\]<]", "", col).strip() for col in df.columns]
-    df.columns = [re.sub(r"\s+", "_", col) for col in df.columns]
-    return df
+    return df.rename(columns=_sanitize_column_name)
+
+
+def _encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.get_dummies(df, columns=[CATEGORICAL_COLUMN], drop_first=False)
+
+
+def _split_features_and_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    target_col = _sanitize_column_name(TARGET_COLUMN)
+    return df.drop(columns=[target_col]), df[target_col]
 
 
 def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Transform raw data into model-ready features and target."""
-    df = df.drop(columns=DROP_COLUMNS)
-    df = pd.get_dummies(df, columns=[CATEGORICAL_COLUMN], drop_first=False)
-    df = _sanitize_columns(df)
-
-    target_col = re.sub(r"\s+", "_", TARGET_COLUMN)
-    X = df.drop(columns=[target_col])
-    y = df[target_col]
-
-    return X, y
+    transformed = (
+        df.drop(columns=DROP_COLUMNS).pipe(_encode_categoricals).pipe(_sanitize_columns)
+    )
+    return _split_features_and_target(transformed)
 
 
 if __name__ == "__main__":

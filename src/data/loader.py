@@ -23,7 +23,9 @@ EXPECTED_COLUMNS = [
 
 
 def load_raw_data(path: Path = RAW_DATA_PATH) -> pd.DataFrame:
-    """Load raw CSV and validate expected columns are present."""
+    if not path.exists():
+        raise FileNotFoundError(f"Data file not found: {path}")
+
     df = pd.read_csv(path)
 
     missing = set(EXPECTED_COLUMNS) - set(df.columns)
