@@ -52,10 +52,10 @@ test-cov: ## Run tests with coverage report
 .PHONY: process-data train
 
 process-data: ## Run ingestion and feature engineering pipeline
-	$(PYTHON) $(SRC)/data/pipeline.py
+	$(PYTHON) $(SRC)/pipelines/data.py
 
 train: process-data ## Process data and train the model
-	$(PYTHON) $(SRC)/training/train.py
+	$(PYTHON) $(SRC)/pipelines/training.py
 
 
 # Local Services
@@ -74,10 +74,10 @@ dashboard: ## Start the Streamlit dashboard at http://localhost:8501
 	$(UV) streamlit run $(SRC)/dashboard/app.py
 
 drift: ## Generate Evidently drift report → reports/drift/drift_report.html
-	$(PYTHON) $(SRC)/monitoring/drift.py
+	$(PYTHON) $(SRC)/monitoring/drift/detector.py
 
 monitor: ## Run the monitoring + auto-retraining pipeline
-	$(PYTHON) -c "from src.training.train import monitoring_pipeline; monitoring_pipeline()"
+	$(PYTHON) -c "from pipelines.monitoring import monitoring_pipeline; monitoring_pipeline()"
 
 
 # Cleanup

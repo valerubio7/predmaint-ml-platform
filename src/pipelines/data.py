@@ -2,21 +2,17 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
-from data.loader import load_raw_data
-from data.transformer import build_features
+from core.features import build_features
+from core.loader import load_raw_data
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = Path("configs/training.yaml")
 
-
-def load_config(path: Path = CONFIG_PATH) -> dict:
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-    with open(path) as f:
-        return yaml.safe_load(f)
+def load_features(raw_path: Path) -> tuple[pd.DataFrame, pd.Series]:
+    """Load raw data and return (X, y) without writing anything to disk."""
+    df = load_raw_data(raw_path)
+    return build_features(df)
 
 
 def _save_features(X: pd.DataFrame, y: pd.Series, path: Path) -> None:
@@ -42,5 +38,7 @@ def run_pipeline(config: dict) -> tuple[pd.DataFrame, pd.Series]:
 
 
 if __name__ == "__main__":
+    from core.config import load_config
+
     config = load_config()
     run_pipeline(config)

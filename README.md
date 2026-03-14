@@ -109,16 +109,22 @@ The model solves a **binary classification problem with ~3.4% failure rate** on 
 ```
 predmaint-ml-platform/
 ├── src/
+│   ├── core/           # Pure business logic (no I/O, no Prefect): config, loader, features
+│   ├── pipelines/      # Prefect flows: data pipeline, training_pipeline, monitoring_pipeline
+│   ├── monitoring/
+│   │   └── drift/      # Evidently drift detection and reference dataset builder
 │   ├── api/            # FastAPI app — /predict, /health, lifespan model loading
-│   ├── data/           # CSV ingestion, feature engineering, Parquet pipeline
-│   ├── training/       # Prefect flows: training_pipeline + monitoring_pipeline
-│   ├── monitoring/     # Evidently drift detection, reference dataset builder
 │   └── dashboard/      # Streamlit interactive dashboard
-├── tests/              # 75+ pytest tests (unit + integration), all Prefect tasks testable via .fn()
+├── tests/
+│   ├── core/           # Unit tests for pure business logic
+│   ├── pipelines/      # Tests for Prefect tasks and flows
+│   ├── monitoring/
+│   │   └── drift/      # Tests for drift detection
+│   └── api/            # Tests for FastAPI endpoints
 ├── configs/
 │   └── training.yaml   # Dataset paths, split config, XGBoost hyperparameters
 ├── .github/
-│   ├── workflows/ci.yml      # lint → typecheck → pytest → Codecov upload
+│   ├── workflows/ci.yml      # lint → typecheck → pytest
 │   └── workflows/deploy.yml  # ECR push → ECS register → zero-downtime deploy
 ├── Dockerfile.api      # Multi-stage build, non-root appuser, HEALTHCHECK
 ├── ecs-task.json       # ECS Fargate task definition (256 CPU, 512 MB, awslogs)

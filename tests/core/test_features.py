@@ -1,15 +1,15 @@
-"""Tests for src/data/transformer.py."""
+"""Tests for src/core/features.py."""
 
 import re
 
 import pandas as pd
+from conftest import make_raw_df
 
-from data.transformer import (
+from core.features import (
     DROP_COLUMNS,
     _sanitize_columns,
     build_features,
 )
-from tests.conftest import make_raw_df
 
 # ---------------------------------------------------------------------------
 # _sanitize_columns tests

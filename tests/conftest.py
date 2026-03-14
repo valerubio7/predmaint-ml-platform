@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from data.loader import EXPECTED_COLUMNS
+from core.loader import EXPECTED_COLUMNS
 
 # ---------------------------------------------------------------------------
 # Raw data builders

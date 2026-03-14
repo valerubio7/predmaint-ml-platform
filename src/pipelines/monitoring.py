@@ -4,10 +4,9 @@ from pathlib import Path
 
 from prefect import flow, task
 
-from data.loader import load_raw_data
-from data.transformer import build_features
-from monitoring.drift import detect_drift
-from training.train import load_config_task, training_pipeline
+from monitoring.drift.detector import detect_drift
+from pipelines.data import load_features
+from pipelines.training import load_config_task, training_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,7 @@ PRODUCTION_SAMPLE_START_ROW = int(os.getenv("PRODUCTION_SAMPLE_START_ROW", "7000
 @task(name="check-drift")
 def check_drift(config: dict) -> bool:
     raw_path = Path(config["data"]["raw_path"])
-    df = load_raw_data(raw_path)
-    X, _ = build_features(df)
+    X, _ = load_features(raw_path)
     production_sample = X.iloc[PRODUCTION_SAMPLE_START_ROW:]
     result = detect_drift(production_sample)
     logger.info("Drift detected: %s", result["drift_detected"])

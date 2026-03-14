@@ -11,9 +11,9 @@ from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_sco
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
-from data.loader import load_raw_data
-from data.pipeline import load_config
-from data.transformer import build_features
+from core.config import load_config
+from core.features import build_features
+from core.loader import load_raw_data
 
 logger = logging.getLogger(__name__)
 

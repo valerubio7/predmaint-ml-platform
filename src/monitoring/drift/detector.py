@@ -6,8 +6,8 @@ import pandas as pd
 from evidently import DataDefinition, Dataset, Report
 from evidently.presets import DataDriftPreset
 
-from data.loader import load_raw_data
-from data.transformer import build_features
+from core.features import build_features
+from core.loader import load_raw_data
 
 logger = logging.getLogger(__name__)
 

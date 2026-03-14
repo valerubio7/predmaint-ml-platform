@@ -1,13 +1,14 @@
-"""Tests for src/data/pipeline.py."""
+"""Tests for src/pipelines/data.py."""
 
 from pathlib import Path
 
 import pandas as pd
 import pytest
 import yaml
+from conftest import make_raw_csv
 
-from data.pipeline import load_config, run_pipeline
-from tests.conftest import make_raw_csv
+from core.config import load_config
+from pipelines.data import run_pipeline
 
 # ---------------------------------------------------------------------------
 # Helpers

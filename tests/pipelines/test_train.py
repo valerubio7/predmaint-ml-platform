@@ -1,4 +1,4 @@
-"""Tests for src/training/train.py — unit tests for individual Prefect tasks.
+"""Tests for src/pipelines/training.py — unit tests for individual Prefect tasks.
 
 Prefect tasks are tested by calling the underlying function directly (without
 the Prefect runtime) via the .fn attribute, so these tests run fast without
@@ -11,8 +11,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import yaml
-
-from tests.conftest import make_raw_csv
+from conftest import make_raw_csv
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,14 +67,14 @@ def _make_training_config(tmp_path: Path) -> dict:
 
 def test_load_config_task_returns_dict(tmp_path, monkeypatch):
     """load_config_task must return a dict."""
-    import data.pipeline as pipeline_module
-    from training.train import load_config_task
+    import core.config as config_module
+    from pipelines.training import load_config_task
 
     config_content = {"data": {"raw_path": "x.csv"}}
     cfg_path = tmp_path / "training.yaml"
     cfg_path.write_text(yaml.dump(config_content))
 
-    monkeypatch.setattr(pipeline_module, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", cfg_path)
 
     result = load_config_task.fn()
     assert isinstance(result, dict)
@@ -88,7 +87,7 @@ def test_load_config_task_returns_dict(tmp_path, monkeypatch):
 
 def test_ingest_data_task_returns_dataframe(tmp_path):
     """ingest_data task must return a pd.DataFrame."""
-    from training.train import ingest_data
+    from pipelines.training import ingest_data
 
     config = _make_training_config(tmp_path)
     result = ingest_data.fn(config)
@@ -97,7 +96,7 @@ def test_ingest_data_task_returns_dataframe(tmp_path):
 
 def test_ingest_data_task_has_expected_rows(tmp_path):
     """ingest_data task must return 102 rows (our minimal CSV)."""
-    from training.train import ingest_data
+    from pipelines.training import ingest_data
 
     config = _make_training_config(tmp_path)
     result = ingest_data.fn(config)
@@ -111,7 +110,7 @@ def test_ingest_data_task_has_expected_rows(tmp_path):
 
 def test_build_features_task_returns_tuple(tmp_path):
     """build_features_task must return a (DataFrame, Series) tuple."""
-    from training.train import build_features_task, ingest_data
+    from pipelines.training import build_features_task, ingest_data
 
     config = _make_training_config(tmp_path)
     df = ingest_data.fn(config)
@@ -122,7 +121,7 @@ def test_build_features_task_returns_tuple(tmp_path):
 
 def test_build_features_task_feature_count(tmp_path):
     """Feature matrix must have 8 columns."""
-    from training.train import build_features_task, ingest_data
+    from pipelines.training import build_features_task, ingest_data
 
     config = _make_training_config(tmp_path)
     df = ingest_data.fn(config)
@@ -137,7 +136,7 @@ def test_build_features_task_feature_count(tmp_path):
 
 def test_split_data_task_returns_four_parts():
     """split_data task must return four DataFrames/Series."""
-    from training.train import split_data
+    from pipelines.training import split_data
 
     X = _make_feature_df()
     y = _make_target()
@@ -152,7 +151,7 @@ def test_split_data_task_returns_four_parts():
 
 def test_split_data_task_sizes():
     """80% train / 20% test split for 200 rows."""
-    from training.train import split_data
+    from pipelines.training import split_data
 
     X = _make_feature_df(200)
     y = _make_target(200)
@@ -165,7 +164,7 @@ def test_split_data_task_sizes():
 
 def test_split_data_task_no_overlap():
     """Train and test sets must not share indices."""
-    from training.train import split_data
+    from pipelines.training import split_data
 
     X = _make_feature_df(100)
     y = _make_target(100)
@@ -177,7 +176,7 @@ def test_split_data_task_no_overlap():
 
 def test_split_data_task_stratified():
     """Stratified split must preserve class ratio (within 10%)."""
-    from training.train import split_data
+    from pipelines.training import split_data
 
     n = 200
     y = pd.Series([0] * 180 + [1] * 20)
@@ -197,7 +196,7 @@ def test_train_model_task_returns_classifier(tmp_path):
     """train_model task must return an XGBClassifier instance."""
     from xgboost import XGBClassifier
 
-    from training.train import split_data, train_model
+    from pipelines.training import split_data, train_model
 
     config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
@@ -211,7 +210,7 @@ def test_train_model_task_returns_classifier(tmp_path):
 
 def test_train_model_task_is_fitted(tmp_path):
     """Returned model must be fitted (can call predict)."""
-    from training.train import split_data, train_model
+    from pipelines.training import split_data, train_model
 
     config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
@@ -231,7 +230,7 @@ def test_train_model_task_is_fitted(tmp_path):
 
 def test_evaluate_model_task_returns_dict(tmp_path):
     """evaluate_model task must return a dict."""
-    from training.train import evaluate_model, split_data, train_model
+    from pipelines.training import evaluate_model, split_data, train_model
 
     config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
@@ -246,7 +245,7 @@ def test_evaluate_model_task_returns_dict(tmp_path):
 
 def test_evaluate_model_task_has_required_keys(tmp_path):
     """Metrics dict must contain f1, precision, recall, roc_auc."""
-    from training.train import evaluate_model, split_data, train_model
+    from pipelines.training import evaluate_model, split_data, train_model
 
     config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
@@ -262,7 +261,7 @@ def test_evaluate_model_task_has_required_keys(tmp_path):
 
 def test_evaluate_model_task_values_in_range(tmp_path):
     """All metric values must be floats in [0, 1]."""
-    from training.train import evaluate_model, split_data, train_model
+    from pipelines.training import evaluate_model, split_data, train_model
 
     config = _make_training_config(tmp_path)
     X = _make_feature_df(200)
@@ -283,16 +282,16 @@ def test_evaluate_model_task_values_in_range(tmp_path):
 
 def test_log_to_mlflow_task_calls_log_metrics():
     """log_to_mlflow task must call mlflow.log_metrics with all 4 metrics."""
-    from training.train import log_to_mlflow
+    from pipelines.training import log_to_mlflow
 
     metrics = {"f1": 0.8, "precision": 0.75, "recall": 0.85, "roc_auc": 0.9}
 
     with (
-        patch("training.train.mlflow.set_tracking_uri"),
-        patch("training.train.mlflow.set_experiment"),
-        patch("training.train.mlflow.start_run") as mock_run,
-        patch("training.train.mlflow.log_metrics") as mock_log,
-        patch("training.train.mlflow.xgboost.log_model"),
+        patch("pipelines.training.mlflow.set_tracking_uri"),
+        patch("pipelines.training.mlflow.set_experiment"),
+        patch("pipelines.training.mlflow.start_run") as mock_run,
+        patch("pipelines.training.mlflow.log_metrics") as mock_log,
+        patch("pipelines.training.mlflow.xgboost.log_model"),
     ):
         mock_run.return_value.__enter__ = MagicMock(return_value=None)
         mock_run.return_value.__exit__ = MagicMock(return_value=False)
@@ -304,17 +303,17 @@ def test_log_to_mlflow_task_calls_log_metrics():
 
 def test_log_to_mlflow_task_registers_model():
     """log_to_mlflow task must call mlflow.xgboost.log_model."""
-    from training.train import log_to_mlflow
+    from pipelines.training import log_to_mlflow
 
     metrics = {"f1": 0.8, "precision": 0.75, "recall": 0.85, "roc_auc": 0.9}
     mock_model = MagicMock()
 
     with (
-        patch("training.train.mlflow.set_tracking_uri"),
-        patch("training.train.mlflow.set_experiment"),
-        patch("training.train.mlflow.start_run") as mock_run,
-        patch("training.train.mlflow.log_metrics"),
-        patch("training.train.mlflow.xgboost.log_model") as mock_xgb_log,
+        patch("pipelines.training.mlflow.set_tracking_uri"),
+        patch("pipelines.training.mlflow.set_experiment"),
+        patch("pipelines.training.mlflow.start_run") as mock_run,
+        patch("pipelines.training.mlflow.log_metrics"),
+        patch("pipelines.training.mlflow.xgboost.log_model") as mock_xgb_log,
     ):
         mock_run.return_value.__enter__ = MagicMock(return_value=None)
         mock_run.return_value.__exit__ = MagicMock(return_value=False)
@@ -332,12 +331,12 @@ def test_log_to_mlflow_task_registers_model():
 
 def test_save_model_task_saves_pkl(tmp_path, monkeypatch):
     """save_model task must write a .pkl file via joblib.dump."""
-    import training.train as train_module
+    import pipelines.training as train_module
 
     monkeypatch.setattr(train_module, "MODEL_PATH", tmp_path / "model.pkl")
     mock_model = MagicMock()
 
-    with patch("training.train.joblib.dump") as mock_dump:
+    with patch("pipelines.training.joblib.dump") as mock_dump:
         train_module.save_model.fn(mock_model)
 
     mock_dump.assert_called_once()
@@ -346,13 +345,13 @@ def test_save_model_task_saves_pkl(tmp_path, monkeypatch):
 
 def test_save_model_task_uses_model_path(tmp_path, monkeypatch):
     """save_model task must dump to MODEL_PATH."""
-    import training.train as train_module
+    import pipelines.training as train_module
 
     expected_path = tmp_path / "model.pkl"
     monkeypatch.setattr(train_module, "MODEL_PATH", expected_path)
     mock_model = MagicMock()
 
-    with patch("training.train.joblib.dump") as mock_dump:
+    with patch("pipelines.training.joblib.dump") as mock_dump:
         train_module.save_model.fn(mock_model)
 
     assert mock_dump.call_args[0][1] == expected_path

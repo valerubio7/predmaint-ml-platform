@@ -1,13 +1,13 @@
-"""Tests for src/data/loader.py."""
+"""Tests for src/core/loader.py."""
 
 import re
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from conftest import make_valid_csv
 
-from data.loader import EXPECTED_COLUMNS, load_raw_data
-from tests.conftest import make_valid_csv
+from core.loader import EXPECTED_COLUMNS, load_raw_data
 
 # ---------------------------------------------------------------------------
 # Happy-path tests

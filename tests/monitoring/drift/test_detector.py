@@ -1,4 +1,4 @@
-"""Tests for src/monitoring/drift.py.
+"""Tests for src/monitoring/drift/detector.py.
 
 Evidently is an external, heavy dependency that writes HTML files and parquet.
 All tests use mocking / real lightweight DataFrames to stay fast and isolated.
@@ -59,20 +59,19 @@ def _make_reference_parquet(tmp_path: Path, rows: int = 100) -> Path:
 
 def test_build_reference_dataset_creates_parquet(tmp_path, monkeypatch):
     """build_reference_dataset must write a Parquet file."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
-    # Patch the path so it writes to tmp_path
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", tmp_path / "reference.parquet")
 
-    # Patch load_raw_data and build_features to avoid real file I/O
     raw_df = pd.DataFrame({"dummy": range(100)})
     feature_df = _make_feature_df(100)
     target_series = pd.Series([0] * 100)
 
     with (
-        patch("monitoring.drift.load_raw_data", return_value=raw_df),
+        patch("monitoring.drift.detector.load_raw_data", return_value=raw_df),
         patch(
-            "monitoring.drift.build_features", return_value=(feature_df, target_series)
+            "monitoring.drift.detector.build_features",
+            return_value=(feature_df, target_series),
         ),
     ):
         drift_module.build_reference_dataset()
@@ -82,7 +81,7 @@ def test_build_reference_dataset_creates_parquet(tmp_path, monkeypatch):
 
 def test_build_reference_dataset_saves_70_percent(tmp_path, monkeypatch):
     """Reference dataset must be the first 70% of rows."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     n = 100
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", tmp_path / "reference.parquet")
@@ -91,9 +90,10 @@ def test_build_reference_dataset_saves_70_percent(tmp_path, monkeypatch):
     target_series = pd.Series([0] * n)
 
     with (
-        patch("monitoring.drift.load_raw_data", return_value=pd.DataFrame()),
+        patch("monitoring.drift.detector.load_raw_data", return_value=pd.DataFrame()),
         patch(
-            "monitoring.drift.build_features", return_value=(feature_df, target_series)
+            "monitoring.drift.detector.build_features",
+            return_value=(feature_df, target_series),
         ),
     ):
         drift_module.build_reference_dataset()
@@ -104,16 +104,17 @@ def test_build_reference_dataset_saves_70_percent(tmp_path, monkeypatch):
 
 def test_build_reference_dataset_contains_target_column(tmp_path, monkeypatch):
     """Saved reference must have a 'target' column."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", tmp_path / "reference.parquet")
     feature_df = _make_feature_df(50)
     target_series = pd.Series([0] * 50)
 
     with (
-        patch("monitoring.drift.load_raw_data", return_value=pd.DataFrame()),
+        patch("monitoring.drift.detector.load_raw_data", return_value=pd.DataFrame()),
         patch(
-            "monitoring.drift.build_features", return_value=(feature_df, target_series)
+            "monitoring.drift.detector.build_features",
+            return_value=(feature_df, target_series),
         ),
     ):
         drift_module.build_reference_dataset()
@@ -124,7 +125,7 @@ def test_build_reference_dataset_contains_target_column(tmp_path, monkeypatch):
 
 def test_build_reference_dataset_creates_parent_dir(tmp_path, monkeypatch):
     """build_reference_dataset must create missing parent directories."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     nested = tmp_path / "a" / "b" / "reference.parquet"
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", nested)
@@ -132,9 +133,10 @@ def test_build_reference_dataset_creates_parent_dir(tmp_path, monkeypatch):
     target_series = pd.Series([0] * 20)
 
     with (
-        patch("monitoring.drift.load_raw_data", return_value=pd.DataFrame()),
+        patch("monitoring.drift.detector.load_raw_data", return_value=pd.DataFrame()),
         patch(
-            "monitoring.drift.build_features", return_value=(feature_df, target_series)
+            "monitoring.drift.detector.build_features",
+            return_value=(feature_df, target_series),
         ),
     ):
         drift_module.build_reference_dataset()
@@ -156,7 +158,7 @@ def _mock_snapshot(drift_share: float) -> MagicMock:
 
 def test_detect_drift_returns_dict(tmp_path, monkeypatch):
     """detect_drift must return a dict."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -166,7 +168,7 @@ def test_detect_drift_returns_dict(tmp_path, monkeypatch):
     mock_snapshot = _mock_snapshot(0.0)
     mock_report.run.return_value = mock_snapshot
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         production = _make_feature_df(30)
         result = drift_module.detect_drift(production)
 
@@ -175,7 +177,7 @@ def test_detect_drift_returns_dict(tmp_path, monkeypatch):
 
 def test_detect_drift_has_required_keys(tmp_path, monkeypatch):
     """Result dict must contain 'drift_detected' and 'report_path'."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -184,7 +186,7 @@ def test_detect_drift_has_required_keys(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.0)
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         result = drift_module.detect_drift(_make_feature_df(30))
 
     assert "drift_detected" in result
@@ -193,7 +195,7 @@ def test_detect_drift_has_required_keys(tmp_path, monkeypatch):
 
 def test_detect_drift_is_false_below_threshold(tmp_path, monkeypatch):
     """drift_detected must be False when drift_share < threshold."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -203,7 +205,7 @@ def test_detect_drift_is_false_below_threshold(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.01)  # below threshold
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         result = drift_module.detect_drift(_make_feature_df(30))
 
     assert result["drift_detected"] is False
@@ -211,7 +213,7 @@ def test_detect_drift_is_false_below_threshold(tmp_path, monkeypatch):
 
 def test_detect_drift_is_true_at_threshold(tmp_path, monkeypatch):
     """drift_detected must be True when drift_share >= threshold."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -221,7 +223,7 @@ def test_detect_drift_is_true_at_threshold(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.05)  # exactly at threshold
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         result = drift_module.detect_drift(_make_feature_df(30))
 
     assert result["drift_detected"] is True
@@ -229,7 +231,7 @@ def test_detect_drift_is_true_at_threshold(tmp_path, monkeypatch):
 
 def test_detect_drift_is_true_above_threshold(tmp_path, monkeypatch):
     """drift_detected must be True when drift_share > threshold."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -239,7 +241,7 @@ def test_detect_drift_is_true_above_threshold(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.50)  # heavy drift
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         result = drift_module.detect_drift(_make_feature_df(30))
 
     assert result["drift_detected"] is True
@@ -247,7 +249,7 @@ def test_detect_drift_is_true_above_threshold(tmp_path, monkeypatch):
 
 def test_detect_drift_report_path_is_html(tmp_path, monkeypatch):
     """Report path must end with .html."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -256,7 +258,7 @@ def test_detect_drift_report_path_is_html(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.0)
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         result = drift_module.detect_drift(_make_feature_df(30))
 
     assert result["report_path"].endswith(".html")
@@ -264,7 +266,7 @@ def test_detect_drift_report_path_is_html(tmp_path, monkeypatch):
 
 def test_detect_drift_calls_evidently_report(tmp_path, monkeypatch):
     """detect_drift must call Report.run() exactly once."""
-    import monitoring.drift as drift_module
+    import monitoring.drift.detector as drift_module
 
     ref_path = _make_reference_parquet(tmp_path)
     monkeypatch.setattr(drift_module, "REFERENCE_PATH", ref_path)
@@ -273,7 +275,7 @@ def test_detect_drift_calls_evidently_report(tmp_path, monkeypatch):
     mock_report = MagicMock()
     mock_report.run.return_value = _mock_snapshot(0.0)
 
-    with patch("monitoring.drift.Report", return_value=mock_report):
+    with patch("monitoring.drift.detector.Report", return_value=mock_report):
         drift_module.detect_drift(_make_feature_df(30))
 
     mock_report.run.assert_called_once()
