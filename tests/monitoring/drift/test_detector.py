@@ -152,7 +152,14 @@ def test_build_reference_dataset_creates_parent_dir(tmp_path, monkeypatch):
 def _mock_snapshot(drift_share: float) -> MagicMock:
     """Return a mock Evidently snapshot with a given drift_share."""
     snapshot = MagicMock()
-    snapshot.dict.return_value = {"metrics": [{"value": {"share": drift_share}}]}
+    snapshot.dict.return_value = {
+        "metrics": [
+            {
+                "metric_name": "DriftedColumnsCount(drift_share=0.5)",
+                "value": {"share": drift_share},
+            }
+        ]
+    }
     return snapshot
 
 
