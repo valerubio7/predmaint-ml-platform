@@ -1,10 +1,12 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as st_components
 
 API_URL = os.getenv("STREAMLIT_API_URL", "http://localhost:8000")
 
@@ -102,3 +104,58 @@ if data_path.exists():
     st.plotly_chart(fig, width="stretch")
 else:
     st.warning("Dataset not found at data/raw/ai4i2020.csv")
+
+
+# Drift Reports
+_REPORTS_DIR = Path(__file__).resolve().parents[2] / "reports" / "drift"
+_TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
+
+
+def _list_drift_reports(reports_dir: Path) -> list[Path]:
+    """Return HTML drift reports sorted newest-first."""
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*.html"), reverse=True)
+
+
+def _parse_report_label(path: Path) -> str:
+    """Convert a report filename to a human-readable label.
+
+    Example: drift_report_20260315T143000Z.html -> 2026-03-15 14:30:00 UTC
+    Falls back to the raw filename if parsing fails.
+    """
+    stem = path.stem  # e.g. drift_report_20260315T143000Z
+    raw_timestamp = stem.split("drift_report_")[-1]
+    try:
+        dt = datetime.strptime(raw_timestamp, _TIMESTAMP_FORMAT).replace(
+            tzinfo=timezone.utc
+        )
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except ValueError:
+        return path.name
+
+
+st.header("Drift Reports")
+
+drift_reports = _list_drift_reports(_REPORTS_DIR)
+
+if not drift_reports:
+    st.info(
+        "No drift reports found. Run `make drift` to generate one.",
+        icon="ℹ️",
+    )
+else:
+    report_labels = [_parse_report_label(p) for p in drift_reports]
+    selected_label = st.selectbox(
+        "Select report",
+        options=report_labels,
+        index=0,
+    )
+    selected_path = drift_reports[report_labels.index(selected_label)]
+
+    st.caption(f"File: `{selected_path.name}`")
+    st_components.html(
+        selected_path.read_text(encoding="utf-8"),
+        height=800,
+        scrolling=True,
+    )
