@@ -16,7 +16,6 @@ build/
 
 # Data & Models
 models/*
-!models/.gitkeep
 data/processed/*
 
 # MLflow
@@ -38,6 +37,9 @@ reports/drift/
 # Jupyter
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
+
+# Prefect
+.prefect/
 
 # Tools
 .ruff_cache/

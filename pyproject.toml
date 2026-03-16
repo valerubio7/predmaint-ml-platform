@@ -51,9 +51,14 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 filterwarnings = [
     "ignore::DeprecationWarning:evidently",
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # assert statements are fine in tests (excluded) and not in src
 
 [tool.mypy]
 python_version = "3.12"
