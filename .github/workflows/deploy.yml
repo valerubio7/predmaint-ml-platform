@@ -25,9 +25,11 @@
 #        - ecs:UpdateService, ecs:DescribeServices (on predmaint-cluster/predmaint-api)
 #        - iam:PassRole (on ecsTaskExecutionRole and ecsTaskRole)
 #
-#   3. Add the following GitHub Secrets to the repository:
-#        AWS_ACCOUNT_ID      = your 12-digit AWS account ID
+#   3. Add the following GitHub Secret to the repository:
 #        AWS_DEPLOY_ROLE_ARN = arn:aws:iam::<AWS_ACCOUNT_ID>:role/github-actions-deploy
+#
+#      AWS_ACCOUNT_ID is NOT required as a secret — it is resolved automatically
+#      from the OIDC credentials via aws sts get-caller-identity.
 
 name: Deploy
 
@@ -45,7 +47,6 @@ concurrency:
 
 env:
   AWS_REGION: us-east-2
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
   ECR_REPOSITORY: predmaint-api
   ECS_CLUSTER: predmaint-cluster
   ECS_SERVICE: predmaint-api
@@ -65,6 +66,12 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve ECR registry URL
+        id: ecr-registry
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "url=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> $GITHUB_OUTPUT
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -72,6 +79,7 @@ jobs:
       - name: Build, tag & push Docker image
         id: build
         env:
+          ECR_REGISTRY: ${{ steps.ecr-registry.outputs.url }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build \
@@ -85,6 +93,7 @@ jobs:
 
       - name: Force new ECS deployment
         env:
+          ECR_REGISTRY: ${{ steps.ecr-registry.outputs.url }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           TASK_DEF=$(jq --arg img "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
