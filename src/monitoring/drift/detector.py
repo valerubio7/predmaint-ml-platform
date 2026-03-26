@@ -11,6 +11,7 @@ from evidently.presets import DataDriftPreset
 
 from core.features import build_features
 from core.loader import load_raw_data
+from monitoring.metrics.prometheus import DATA_DRIFT_DETECTED_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,9 @@ def detect_drift(production_data: pd.DataFrame) -> dict:
 
     drift_share = _extract_drift_share(snapshot.dict())
     drift_detected = _decide_drift(drift_share, DRIFT_THRESHOLD)
+
+    if drift_detected:
+        DATA_DRIFT_DETECTED_TOTAL.inc()
 
     return {
         "drift_detected": drift_detected,

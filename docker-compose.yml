@@ -1,0 +1,162 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+    environment:
+      MODEL_PATH: models/model.pkl
+      API_ENV: development
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PREFECT_API_URL: http://prefect:4200/api
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      prefect:
+        condition: service_healthy
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    user: "0:0"
+    command:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /app/mlflow/artifacts && uv run mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////app/mlflow/mlflow.db --default-artifact-root /app/mlflow/artifacts",
+      ]
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/app/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  prefect:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    user: "0:0"
+    command:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /app/prefect && uv run prefect server start --host 0.0.0.0 --port 4200 --no-services",
+      ]
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect_data:/app/prefect
+    environment:
+      PREFECT_HOME: /app/prefect
+      PREFECT_API_DATABASE_CONNECTION_URL: sqlite+aiosqlite:////app/prefect/prefect.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  evidently:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do uv run python src/monitoring/drift/detector.py || true; sleep 300; done",
+      ]
+    environment:
+      DRIFT_THRESHOLD: 0.05
+    volumes:
+      - ./data:/app/data:ro
+      - ./reports:/app/reports
+    depends_on:
+      api:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command:
+      [
+        "uv",
+        "run",
+        "streamlit",
+        "run",
+        "src/dashboard/app.py",
+        "--server.address",
+        "0.0.0.0",
+        "--server.port",
+        "8501",
+      ]
+    environment:
+      STREAMLIT_API_URL: http://api:8000
+      MLFLOW_URL: http://mlflow:5000
+      PREFECT_URL: http://prefect:4200
+      GRAFANA_URL: http://grafana:3000
+      PROMETHEUS_URL: http://prometheus:9090
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data:ro
+      - ./reports:/app/reports
+    depends_on:
+      api:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+      prefect:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin # pragma: allowlist secret
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  mlflow_data:
+  prefect_data:

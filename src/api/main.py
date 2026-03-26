@@ -8,7 +8,10 @@ import joblib
 import pandas as pd
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
+
+from monitoring.metrics.prometheus import MODEL_CONFIDENCE_SCORE, PREDICTIONS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+Instrumentator().instrument(app).expose(app)
+
 
 class SensorData(BaseModel):
     air_temperature: float
@@ -140,6 +145,10 @@ def predict(data: SensorData):
 
         prediction = model.predict(features)[0]
         probability = model.predict_proba(features)[0][1]
+
+        outcome = "failure" if bool(prediction) else "normal"
+        PREDICTIONS_TOTAL.labels(outcome=outcome).inc()
+        MODEL_CONFIDENCE_SCORE.observe(float(probability))
 
         return PredictionResponse(
             failure_predicted=bool(prediction),
